@@ -1174,10 +1174,10 @@ def _render_index_html(
             <label><input id="do-sample" type="checkbox" checked> Do Sample</label>
           </div>
           <div class="field">
-            <label><input id="enable-text-normalization" type="checkbox"> Enable WeTextProcessing</label>
+            <label><input id="enable-text-normalization" type="checkbox" checked> Enable WeTextProcessing</label>
           </div>
           <div class="field">
-            <label><input id="enable-robust-text-normalization" type="checkbox"> Enable normalize_tts_text</label>
+            <label><input id="enable-robust-text-normalization" type="checkbox" checked> Enable normalize_tts_text</label>
           </div>
           <div class="meta">
             WeTextProcessing and normalize_tts_text can now be toggled independently for each request.
@@ -2507,8 +2507,8 @@ def _build_app(
         voice_clone_max_text_tokens: int = Form(75),
         tts_max_batch_size: int = Form(0),
         codec_max_batch_size: int = Form(0),
-        enable_text_normalization: str = Form("0"),
-        enable_normalize_tts_text: str = Form("0"),
+        enable_text_normalization: str = Form("1"),
+        enable_normalize_tts_text: str = Form("1"),
         cpu_threads: int = Form(0),
         attn_implementation: str = Form("model_default"),
         do_sample: str = Form("1"),
@@ -2718,8 +2718,8 @@ def _build_app(
         voice_clone_max_text_tokens: int = Form(75),
         tts_max_batch_size: int = Form(0),
         codec_max_batch_size: int = Form(0),
-        enable_text_normalization: str = Form("0"),
-        enable_normalize_tts_text: str = Form("0"),
+        enable_text_normalization: str = Form("1"),
+        enable_normalize_tts_text: str = Form("1"),
         cpu_threads: int = Form(0),
         attn_implementation: str = Form("model_default"),
         do_sample: str = Form("1"),

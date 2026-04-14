@@ -144,7 +144,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=int,
         nargs="?",
         const=1,
-        default=0,
+        default=1,
         choices=[0, 1],
         help="Enable WeTextProcessing normalization before inference.",
     )
@@ -158,6 +158,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--enable-robust-text-normalization",
         dest="enable_normalize_tts_text",
         action="store_true",
+        default=True,
         help="Enable the repository's normalize_tts_text robust cleanup before inference.",
     )
     parser.add_argument(
