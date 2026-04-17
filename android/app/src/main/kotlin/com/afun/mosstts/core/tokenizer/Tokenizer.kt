@@ -28,25 +28,33 @@ class Tokenizer private constructor(
     private val userDefinedPieces: List<String>,
 ) {
     /**
-     * SP-style encoding: split by USER_DEFINED specials first (each emitted
-     * verbatim as a single id, no normalization), then for every remaining
-     * text segment run normalize + BPE + byte_fallback. The dummy '▁' prefix
-     * is added only to the very first segment, matching Python sentencepiece.
+     * SP-style encoding: normalize the *entire* input once (this is what
+     * Python sentencepiece does — the user-defined pieces are ASCII-printable
+     * so they survive nfkc + whitespace-fold + collapse + trim + escape +
+     * dummy-prefix unchanged), then split the normalized string by
+     * USER_DEFINED specials. Each special is emitted verbatim as a single id;
+     * each remaining text run is BPE-encoded with byte fallback.
+     *
+     * Doing the normalize *once* (as opposed to per-segment) is critical for
+     * matching sp on inputs like "<|im_start|>\nabc" → `▁,<|im_start|>,▁ab,c`,
+     * because the post-special "\n" only becomes the leading ▁ of "▁abc"
+     * after sp's whole-input ws-fold + escape pipeline runs over both sides
+     * of the special token.
      */
     fun encode(text: String): IntArray {
-        if (text.isEmpty()) {
-            return encoder.encode(normalizer.normalize(text))
-        }
+        if (text.isEmpty()) return IntArray(0)
+        val normalized = normalizer.normalize(text)
+        if (normalized.isEmpty()) return IntArray(0)
 
-        val out = ArrayList<Int>(text.length)
-        var firstSegment = true
+        val out = ArrayList<Int>(normalized.length)
         var bufferStart = 0
         var i = 0
-        while (i < text.length) {
-            val matched = matchUserDefinedAt(text, i)
+        while (i < normalized.length) {
+            val matched = matchUserDefinedAt(normalized, i)
             if (matched != null) {
-                emitSegment(text, bufferStart, i, firstSegment, out)
-                firstSegment = false
+                if (i > bufferStart) {
+                    for (id in encoder.encode(normalized.substring(bufferStart, i))) out.add(id)
+                }
                 out.add(pieceToId[matched]!!)
                 i += matched.length
                 bufferStart = i
@@ -54,33 +62,10 @@ class Tokenizer private constructor(
                 i++
             }
         }
-        // Trailing tail (or the entire text if no specials matched).
-        if (bufferStart < text.length || firstSegment) {
-            emitSegment(text, bufferStart, text.length, firstSegment, out)
+        if (bufferStart < normalized.length) {
+            for (id in encoder.encode(normalized.substring(bufferStart))) out.add(id)
         }
         return out.toIntArray()
-    }
-
-    private fun emitSegment(
-        text: String,
-        start: Int,
-        end: Int,
-        firstSegment: Boolean,
-        out: MutableList<Int>,
-    ) {
-        val chunk = text.substring(start, end)
-        if (chunk.isEmpty()) {
-            // Python sp emits a lone '▁' when the very first segment of a
-            // non-empty input is empty (e.g. text starts with a USER_DEFINED
-            // special token like "<|im_start|>...").
-            if (firstSegment && text.isNotEmpty()) {
-                pieceToId[SpNormalizer.WHITESPACE_BLOCK.toString()]?.let(out::add)
-            }
-            return
-        }
-        val normalized = normalizer.normalize(chunk, addDummyPrefix = firstSegment)
-        if (normalized.isEmpty()) return
-        for (id in encoder.encode(normalized)) out.add(id)
     }
 
     private fun matchUserDefinedAt(text: String, pos: Int): String? {
