@@ -76,7 +76,7 @@ class PromptBuilderTest {
             val expectedFp = fx.inputIds
             if (actualFp != expectedFp) {
                 mismatches += buildString {
-                    appendLine("[#$idx] mode=${fx.mode} text=${fx.text.take(40)!!}")
+                    appendLine("[#$idx] mode=${fx.mode} text=${fx.text.take(40)}")
                     appendLine("    expected shape=${expectedFp.shape} length=${expectedFp.length} sum=${expectedFp.sum}")
                     appendLine("    actual   shape=${actualFp.shape}   length=${actualFp.length}   sum=${actualFp.sum}")
                     appendLine("    expected first16=${expectedFp.first16}")
