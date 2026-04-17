@@ -35,6 +35,14 @@ android {
         jniLibs.useLegacyPackaging = false
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
     }
+
+    // Make assets/ visible to JVM unit tests as classpath resources so we
+    // can load the bundled tokenizer_kotlin.json the same way the runtime does.
+    sourceSets {
+        getByName("test") {
+            resources.srcDir("src/main/assets")
+        }
+    }
 }
 
 dependencies {

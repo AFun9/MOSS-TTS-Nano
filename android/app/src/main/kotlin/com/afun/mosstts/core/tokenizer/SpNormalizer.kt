@@ -25,7 +25,7 @@ class SpNormalizer(
     val removeExtraWhitespaces: Boolean,
     val escapeWhitespaces: Boolean,
 ) {
-    fun normalize(input: String): String {
+    fun normalize(input: String, addDummyPrefix: Boolean = this.addDummyPrefix): String {
         var s = if (name == "nmt_nfkc" || name == "nfkc") nfkcNmt(input) else input
         if (removeExtraWhitespaces) s = collapseWhitespace(s)
         if (escapeWhitespaces) s = s.replace(' ', WHITESPACE_BLOCK)
@@ -52,6 +52,17 @@ class SpNormalizer(
                 // This covers NBSP (U+00A0), ideographic space (U+3000),
                 // narrow no-break (U+202F), zero-width space (U+200B), etc.
                 c.isWhitespace() || code == 0x200B -> sb.append(' ')
+                // SP's precompiled `nmt_nfkc` charsmap drops a handful of
+                // zero-width / bidi format chars while keeping ZWJ (U+200D),
+                // which is needed for many Indic / Arabic ligatures and
+                // appears as a real piece in our vocab. Without these drops
+                // the byte_fallback path emits 3-byte sequences that diverge
+                // from Python sp on inputs that contain them.
+                code == 0x200C ||  // ZWNJ
+                    code == 0x200E || code == 0x200F ||  // LRM / RLM
+                    code in 0x202A..0x202E ||  // bidi explicit overrides
+                    code == 0xFEFF  // BOM / ZWNBSP
+                    -> Unit  // drop
                 else -> sb.append(c)
             }
         }
