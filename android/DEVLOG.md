@@ -4,7 +4,7 @@
 > 设计文档见 `docs/plans/2026-04-16-android-onnx-demo-design.md`。
 > 实现计划见 `docs/plans/2026-04-16-android-onnx-demo-plan.md`（writing-plans 后产出）。
 
-最后更新：2026-04-16
+最后更新：2026-04-16（追加：长文本切句 + 音色锁定方案，纳入 V1.1 backlog）
 
 ---
 
@@ -43,6 +43,7 @@ _暂无。项目尚未开始实现。_
 | P2 | HuggingFace 镜像下载源 | V1.1 |
 | P2 | ModelScope 镜像下载源（国内） | V1.1 |
 | P2 | `export_onnx.py` 写 sha256 到 manifest（配 Android 端去硬编码） | V1.1 |
+| P2 | **长文本切句 + 音色锁定**：ICU `BreakIterator` 切句 → 第 1 句 continuation → 截前 1.0 s 当 voice_clone reference → 句 2..N 用此 reference → 拼 PCM；上限 300 → ~5000 字；流水线（句 N 播放时合成句 N+1）。详见 Decision #27。 | V1.1 |
 | P3 | Voice clone（录音 + UX 引导） | V2 |
 | P3 | L4 日期/时间/货币规范化 | V2 |
 | P3 | 历史记录 / 收藏 / 通知栏后台朗读 | V2+ |
@@ -59,7 +60,9 @@ _暂无。项目尚未开始实现。_
 
 ## 🔴 已知问题 (Known Issues)
 
-_暂无。待实施开始后填充。_
+| # | 严重度 | 描述 | 处理 |
+|---|---|---|---|
+| K1 | 中 | 文本超过 **300 字会被截断**，截断后内容**完全不发声**（不是只播前 300 字然后跳过——后续字根本不送模型）。原因：单段合成的 KV cache 随 prompt + 生成长度线性增长，300 字是防 OOM 与单次合成时长 ≤ 12 s 的硬闸。 | MVP：截断 + Toast 提示（决策 #10）。V1.1：上"切句 + 音色锁定"方案（决策 #27 / Backlog P2），上限放宽到 ~5000 字。 |
 
 ---
 
@@ -95,6 +98,7 @@ _暂无。待实施开始后填充。_
 | 24 | 2026-04-16 | 模型源 GitHub Releases `tag=onnx_model`，URL 写在 `DownloadManifest.kt` | HF / ModelScope / 自托管 | MVP 期零运维；V1.1 加镜像源切换 |
 | 25 | 2026-04-16 | MVP sha256 由 Android 端硬编码；V1.1 改"读 manifest.json 字段" | 完全不校验 / 立刻改 export 端 | 避免侵入 Python；重导模型时手动同步 sha256 表 |
 | 26 | 2026-04-16 | MVP 不开 PR 到上游；只在 fork `feat/android-onnx-demo` 分支自用 | 开 PR 到上游 / 单独 mini repo | 自用为主；避免给上游引入 Android 维护负担 |
+| 27 | 2026-04-16 | **V1.1** 长文本走"句子切分 + 音色锁定"：ICU `BreakIterator` 按 locale 切句；第 1 句 continuation 模式合成（首帧 ~80 ms）；截前 1.0 s 作为后续句的 voice_clone reference；句 2..N 用 voice_clone 模式 + 该 reference；流水线（句 N 播放时后台合成句 N+1）；句间 ~30 ms 静音。每句独立 KV，生成完即销毁，单次合成 KV 上限 ≈ 10-15 MB 恒定。文本上限 300 → ~5000 字。 | ① 仅放宽上限到 600 字（不解决根本问题）<br>② 切句 + seed 锁定（**已验证不可行**：不同句文本 → step 0 hidden 不同 → 即使 RNG 状态一致，第一帧 audio token 也不同 → 音色跳变） <br>③ 滑窗 KV cache（会"忘记"前文，韵律破坏） | seed 不能保证音色对齐，因为模型没有显式 speaker embedding，音色是"第一帧采样的副产品"；voice_clone 的 reference 才是真正的"音色锚"。MVP 维持 300 字 + 截断（决策 #10）已能演示卖点；V1.1 加该方案是真"产品级长文本"。 |
 
 ---
 
