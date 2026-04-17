@@ -4,17 +4,15 @@
 > 设计文档见 `docs/plans/2026-04-16-android-onnx-demo-design.md`。
 > 实现计划见 `docs/plans/2026-04-16-android-onnx-demo-plan.md`（writing-plans 后产出）。
 
-最后更新：2026-04-16（追加：长文本切句 + 音色锁定方案 → V1.1；推理路径锁 Kotlin + ORT Java API → 决策 #28）
+最后更新：2026-04-16（M0 Bootstrap 完成；推理路径锁 Kotlin + ORT Java API → 决策 #28）
 
 ---
 
 ## 🟢 已完成 (Done)
 
-_暂无。项目尚未开始实现。_
-
 | 日期 | 内容 | Commit |
 |---|---|---|
-| – | – | – |
+| 2026-04-16 | **M0 Bootstrap** — Gradle 8.13 wrapper / `:app` module / Compose Hello World / Material3 theme / 纯 vector adaptive launcher icon。`./gradlew :app:assembleDebug` 53 秒过；APK 8.3 MB（裸 Compose，无 native lib）。`adb install` 验证留待真机。 | `ed98ac2`..`41d927a` |
 
 ---
 
@@ -22,7 +20,7 @@ _暂无。项目尚未开始实现。_
 
 | 任务 | 负责人 | 起始日期 | 备注 |
 |---|---|---|---|
-| Brainstorming + 设计文档 | 模型 + AFun9 | 2026-04-16 | § 1 已定，§ 2-8 进行中 |
+| **M1** Model & Tokenizer（≈ 1 d，5 task） | 模型 + AFun9 | _下一阶段_ | M0 已完成；准备进入 |
 
 ---
 
@@ -30,7 +28,7 @@ _暂无。项目尚未开始实现。_
 
 | 优先级 | 项 | 计划阶段 |
 |---|---|---|
-| P1 | Gradle 工程初始化 + Compose 模板 | MVP |
+| ~~P1~~ | ~~Gradle 工程初始化 + Compose 模板~~ | MVP — done in M0 |
 | P1 | ONNX bundle 加载与 5 个 ORT session 创建 | MVP |
 | P1 | 文本 → ONNX 推理 → PCM chunk pipeline | MVP |
 | P1 | 流式 AudioTrack STREAM 播放 | MVP |
