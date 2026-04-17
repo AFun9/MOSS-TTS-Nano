@@ -4,7 +4,7 @@
 > 设计文档见 `docs/plans/2026-04-16-android-onnx-demo-design.md`。
 > 实现计划见 `docs/plans/2026-04-16-android-onnx-demo-plan.md`（writing-plans 后产出）。
 
-最后更新：2026-04-16（追加：长文本切句 + 音色锁定方案，纳入 V1.1 backlog）
+最后更新：2026-04-16（追加：长文本切句 + 音色锁定方案 → V1.1；推理路径锁 Kotlin + ORT Java API → 决策 #28）
 
 ---
 
@@ -99,6 +99,7 @@ _暂无。项目尚未开始实现。_
 | 25 | 2026-04-16 | MVP sha256 由 Android 端硬编码；V1.1 改"读 manifest.json 字段" | 完全不校验 / 立刻改 export 端 | 避免侵入 Python；重导模型时手动同步 sha256 表 |
 | 26 | 2026-04-16 | MVP 不开 PR 到上游；只在 fork `feat/android-onnx-demo` 分支自用 | 开 PR 到上游 / 单独 mini repo | 自用为主；避免给上游引入 Android 维护负担 |
 | 27 | 2026-04-16 | **V1.1** 长文本走"句子切分 + 音色锁定"：ICU `BreakIterator` 按 locale 切句；第 1 句 continuation 模式合成（首帧 ~80 ms）；截前 1.0 s 作为后续句的 voice_clone reference；句 2..N 用 voice_clone 模式 + 该 reference；流水线（句 N 播放时后台合成句 N+1）；句间 ~30 ms 静音。每句独立 KV，生成完即销毁，单次合成 KV 上限 ≈ 10-15 MB 恒定。文本上限 300 → ~5000 字。 | ① 仅放宽上限到 600 字（不解决根本问题）<br>② 切句 + seed 锁定（**已验证不可行**：不同句文本 → step 0 hidden 不同 → 即使 RNG 状态一致，第一帧 audio token 也不同 → 音色跳变） <br>③ 滑窗 KV cache（会"忘记"前文，韵律破坏） | seed 不能保证音色对齐，因为模型没有显式 speaker embedding，音色是"第一帧采样的副产品"；voice_clone 的 reference 才是真正的"音色锚"。MVP 维持 300 字 + 截断（决策 #10）已能演示卖点；V1.1 加该方案是真"产品级长文本"。 |
+| 28 | 2026-04-16 | **推理路径用 Kotlin + ORT Java API**（不上 C++/JNI）。MVP 用 Kotlin；M6 benchmark 后按实测决定：① 首帧 < 150 ms 不动；② 150-300 ms 走廉价优化（IoBinding / OnnxTensor 池 / DirectByteBuffer）；③ > 300 ms 再把 `InferenceLoop` 翻 C++（接口可替换，UI 零改动）。 | C++ + JNI 全栈 / 推理走 NDK 其余 Kotlin | C++ 路线工期 +50%（8.5d → ~14d）、JVM 单测做不了 prompt 金标准对比、调试难一个数量级。Kotlin JNI 开销 ~25-30%（每帧 ~20 ms），但模型计算本身 50 ms 主导，预期首帧 ~90-110 ms 仍 ≤ 150 ms 目标。"自用、可维护"压倒"极致性能"。 |
 
 ---
 
