@@ -137,6 +137,10 @@ def main() -> int:
                 "seed": seed,
                 "n_vq": n_vq,
                 "sha256": hashlib.sha256(codes.tobytes()).hexdigest(),
+                # Inline the codes (row-major, T*n_vq ints) so the Kotlin
+                # test can rebuild byte-identical input without depending on
+                # numpy's PCG64 RNG.
+                "codes": codes.flatten().tolist(),
             },
             "input_ids": fingerprint(input_ids),
             "attention_mask": fingerprint(attention_mask.astype(np.int64)),
@@ -157,6 +161,7 @@ def main() -> int:
                 "seed": seed,
                 "n_vq": n_vq,
                 "sha256": hashlib.sha256(codes.tobytes()).hexdigest(),
+                "codes": codes.flatten().tolist(),
             },
             "input_ids": fingerprint(input_ids),
             "attention_mask": fingerprint(attention_mask.astype(np.int64)),
