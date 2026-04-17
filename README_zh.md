@@ -38,21 +38,27 @@ MOSS-TTS-Nano 是来自 [MOSI.AI](https://mosi.cn/#hero) 和 [OpenMOSS 团队](h
 
 ## 目录
 
-- [新闻](#新闻)
-- [演示](#演示)
-- [介绍](#介绍)
-  - [主要特性](#主要特性)
-- [支持的语言](#支持的语言)
-- [快速开始](#快速开始)
-  - [环境配置](#环境配置)
-  - [使用 `infer.py` 进行语音克隆](#使用-inferpy-进行语音克隆)
-  - [使用 `app.py` 启动本地-web-演示](#使用-apppy-启动本地-web-演示)
-  - [CLI 命令：`moss-tts-nano generate`](#cli-命令-moss-tts-nano-generate)
-  - [CLI 命令：`moss-tts-nano serve`](#cli-命令-moss-tts-nano-serve)
-- [MOSS-Audio-Tokenizer-Nano](#moss-audio-tokenizer-nano)
-- [许可证](#许可证)
-- [引用](#引用)
-- [Star 历史](#star-历史)
+- [MOSS-TTS-Nano](#moss-tts-nano)
+  - [新闻](#新闻)
+  - [演示](#演示)
+  - [目录](#目录)
+  - [介绍](#介绍)
+    - [主要特性](#主要特性)
+  - [支持的语言](#支持的语言)
+  - [快速开始](#快速开始)
+    - [环境配置](#环境配置)
+      - [使用 Conda](#使用-conda)
+    - [使用 `infer.py` 进行语音克隆](#使用-inferpy-进行语音克隆)
+    - [使用 `app.py` 启动本地 Web 演示](#使用-apppy-启动本地-web-演示)
+    - [CLI 命令：`moss-tts-nano generate`](#cli-命令moss-tts-nano-generate)
+    - [CLI 命令：`moss-tts-nano serve`](#cli-命令moss-tts-nano-serve)
+    - [ONNX 部署](#onnx-部署)
+  - [MOSS-Audio-Tokenizer-Nano](#moss-audio-tokenizer-nano)
+    - [介绍](#介绍-1)
+    - [模型权重](#模型权重)
+  - [许可证](#许可证)
+  - [引用](#引用)
+  - [Star 历史](#star-历史)
 
 ## 介绍
 
@@ -166,6 +172,20 @@ moss-tts-nano serve
 ```
 
 此命令转发到 `app.py`，将模型保持在内存中加载，并为本地浏览器演示和 HTTP 生成端点提供服务。
+
+### ONNX 部署
+
+如果需要在没有 PyTorch / Transformers 的环境（移动端、`onnxruntime-web` 浏览器、微服务、嵌入式应用）部署模型，仓库提供了一套端到端的 ONNX bundle：
+
+```bash
+# 导出 bundle（FP32 + INT8 动态量化）
+python export_onnx.py
+
+# 运行推理（CPU INT8，4 核笔记本首帧约 80 ms）
+python onnx_infer.py --text "你好世界。" --output output/hello.wav
+```
+
+INT8 总体积约 165 MB，同时支持标准生成与声音克隆。完整的设计说明、性能数据与架构背景请参考 [README_ONNX_zh.md](README_ONNX_zh.md)。
 
 ## MOSS-Audio-Tokenizer-Nano
 

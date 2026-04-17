@@ -41,21 +41,27 @@ MOSS-TTS-Nano is an open-source **multilingual tiny speech generation model** fr
 
 ## Contents
 
-- [News](#news)
-- [Demo](#demo)
-- [Introduction](#introduction)
-  - [Main Features](#main-features)
-- [Supported Languages](#supported-languages)
-- [Quickstart](#quickstart)
-  - [Environment Setup](#environment-setup)
-  - [Voice Clone with `infer.py`](#voice-clone-with-inferpy)
-  - [Local Web Demo with `app.py`](#local-web-demo-with-apppy)
-  - [CLI Command: `moss-tts-nano generate`](#cli-command-moss-tts-nano-generate)
-  - [CLI Command: `moss-tts-nano serve`](#cli-command-moss-tts-nano-serve)
-- [MOSS-Audio-Tokenizer-Nano](#moss-audio-tokenizer-nano)
-- [License](#license)
-- [Citation](#citation)
-- [Star History](#star-history)
+- [MOSS-TTS-Nano](#moss-tts-nano)
+  - [News](#news)
+  - [Demo](#demo)
+  - [Contents](#contents)
+  - [Introduction](#introduction)
+    - [Main Features](#main-features)
+  - [Supported Languages](#supported-languages)
+  - [Quickstart](#quickstart)
+    - [Environment Setup](#environment-setup)
+      - [Using Conda](#using-conda)
+    - [Voice Clone with `infer.py`](#voice-clone-with-inferpy)
+    - [Local Web Demo with `app.py`](#local-web-demo-with-apppy)
+    - [CLI Command: `moss-tts-nano generate`](#cli-command-moss-tts-nano-generate)
+    - [CLI Command: `moss-tts-nano serve`](#cli-command-moss-tts-nano-serve)
+    - [ONNX deployment](#onnx-deployment)
+  - [MOSS-Audio-Tokenizer-Nano](#moss-audio-tokenizer-nano)
+    - [Introduction](#introduction-1)
+    - [Model Weights](#model-weights)
+  - [License](#license)
+  - [Citation](#citation)
+  - [Star History](#star-history)
 
 ## Introduction
 
@@ -171,6 +177,20 @@ moss-tts-nano serve
 ```
 
 This command forwards to `app.py`, keeps the model loaded in memory, and serves the local browser demo plus HTTP generation endpoints.
+
+### ONNX deployment
+
+For deployment in environments without PyTorch / Transformers (mobile, browser via `onnxruntime-web`, micro-services, embedded apps), the repository ships an end-to-end ONNX bundle:
+
+```bash
+# Export the bundle (FP32 + INT8 dynamic quantization)
+python export_onnx.py
+
+# Run inference (CPU INT8, ~80 ms first-chunk latency on a 4-core laptop)
+python onnx_infer.py --text "你好世界。" --output output/hello.wav
+```
+
+The bundle is ~165 MB INT8 in total and supports both standard generation and voice cloning. See [README_ONNX.md](README_ONNX.md) for the full design notes, performance numbers, and architectural background.
 
 ## MOSS-Audio-Tokenizer-Nano
 

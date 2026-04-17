@@ -199,3 +199,11 @@ weights/tts/*.bin
 weights/tts/tokenizer.model
 generated_audio/*
 .app_prompt_uploads/*
+
+# ONNX deployment: local model checkpoints, exported bundle, runtime outputs
+MOSS-TTS-Nano-100M/
+MOSS-Audio-Tokenizer-Nano/
+onnx_export/
+output/
+codex/
+.codex
