@@ -4,7 +4,7 @@
 > 设计文档见 `docs/plans/2026-04-16-android-onnx-demo-design.md`。
 > 实现计划见 `docs/plans/2026-04-16-android-onnx-demo-plan.md`（writing-plans 后产出）。
 
-最后更新：2026-04-16（M0 Bootstrap 完成；推理路径锁 Kotlin + ORT Java API → 决策 #28）
+最后更新：2026-04-17（M1 第 1 阶段：deps + Manifest/ModelConfig/Sha256/ModelManager 4 个 TDD 任务 ✓，22 unit tests 全绿；sentencepiece 依赖待决策）
 
 ---
 
@@ -12,7 +12,8 @@
 
 | 日期 | 内容 | Commit |
 |---|---|---|
-| 2026-04-16 | **M0 Bootstrap** — Gradle 8.13 wrapper / `:app` module / Compose Hello World / Material3 theme / 纯 vector adaptive launcher icon。`./gradlew :app:assembleDebug` 53 秒过；APK 8.3 MB（裸 Compose，无 native lib）。`adb install` 验证留待真机。 | `ed98ac2`..`41d927a` |
+| 2026-04-16 | **M0 Bootstrap** — Gradle 8.13 wrapper / `:app` module / Compose Hello World / Material3 theme / 纯 vector adaptive launcher icon。`./gradlew :app:assembleDebug` 53 秒过；APK 8.3 MB（裸 Compose，无 native lib）。**真机验证 ✓**（adb install + am start 启动正常）。 | `ed98ac2`..`8b1bcaa` |
+| 2026-04-17 | **M1 第 1 阶段（5/7 task）** — 加 `onnxruntime-android:1.20.0`（APK +17.5 MB native so → 26 MB）；切到 `kotlinx.serialization` 绕开 Android `org.json` stub（决策 #29）；TDD 完成 4 个核心类：`Manifest` / `ModelConfig`（修正 plan 的 `sample_rate=24000` 错误，实际是 `audio_tokenizer_sample_rate=48000`）/ `Sha256Verifier` / `ModelManager`。**22 unit tests 全绿**。`./gradlew :app:assembleDebug` ✓ 28 MB。剩 sentencepiece 依赖（M1.1b）+ Tokenizer JNI wrapper（M1.6）待决策。 | `471d746`..`136b593` |
 
 ---
 
@@ -20,7 +21,7 @@
 
 | 任务 | 负责人 | 起始日期 | 备注 |
 |---|---|---|---|
-| **M1** Model & Tokenizer（≈ 1 d，5 task） | 模型 + AFun9 | _下一阶段_ | M0 已完成；准备进入 |
+| **M1** Model & Tokenizer（重排为 7 task） | Cursor + AFun9 | 2026-04-17 | 5/7 完成；剩 **M1.1b sentencepiece 依赖** + **M1.6 Tokenizer JNI** 待决策（见下） |
 
 ---
 
@@ -98,6 +99,7 @@
 | 26 | 2026-04-16 | MVP 不开 PR 到上游；只在 fork `feat/android-onnx-demo` 分支自用 | 开 PR 到上游 / 单独 mini repo | 自用为主；避免给上游引入 Android 维护负担 |
 | 27 | 2026-04-16 | **V1.1** 长文本走"句子切分 + 音色锁定"：ICU `BreakIterator` 按 locale 切句；第 1 句 continuation 模式合成（首帧 ~80 ms）；截前 1.0 s 作为后续句的 voice_clone reference；句 2..N 用 voice_clone 模式 + 该 reference；流水线（句 N 播放时后台合成句 N+1）；句间 ~30 ms 静音。每句独立 KV，生成完即销毁，单次合成 KV 上限 ≈ 10-15 MB 恒定。文本上限 300 → ~5000 字。 | ① 仅放宽上限到 600 字（不解决根本问题）<br>② 切句 + seed 锁定（**已验证不可行**：不同句文本 → step 0 hidden 不同 → 即使 RNG 状态一致，第一帧 audio token 也不同 → 音色跳变） <br>③ 滑窗 KV cache（会"忘记"前文，韵律破坏） | seed 不能保证音色对齐，因为模型没有显式 speaker embedding，音色是"第一帧采样的副产品"；voice_clone 的 reference 才是真正的"音色锚"。MVP 维持 300 字 + 截断（决策 #10）已能演示卖点；V1.1 加该方案是真"产品级长文本"。 |
 | 28 | 2026-04-16 | **推理路径用 Kotlin + ORT Java API**（不上 C++/JNI）。MVP 用 Kotlin；M6 benchmark 后按实测决定：① 首帧 < 150 ms 不动；② 150-300 ms 走廉价优化（IoBinding / OnnxTensor 池 / DirectByteBuffer）；③ > 300 ms 再把 `InferenceLoop` 翻 C++（接口可替换，UI 零改动）。 | C++ + JNI 全栈 / 推理走 NDK 其余 Kotlin | C++ 路线工期 +50%（8.5d → ~14d）、JVM 单测做不了 prompt 金标准对比、调试难一个数量级。Kotlin JNI 开销 ~25-30%（每帧 ~20 ms），但模型计算本身 50 ms 主导，预期首帧 ~90-110 ms 仍 ≤ 150 ms 目标。"自用、可维护"压倒"极致性能"。 |
+| 29 | 2026-04-17 | **JSON 解析用 `kotlinx.serialization-json:1.6.3`**（`implementation` 进 main，APK +~700 KB） | ① Android 自带 `org.json` ② Robolectric ③ `org.json:json` Maven artifact 加 testImpl ④ Moshi / Jackson | Android 在 JVM 单测里把 `org.json.*` 全 stub 成抛 `RuntimeException("not mocked")`，且 mockable-android.jar 在 classpath 顺序上压过 testImplementation，导致 `org.json:json` 也救不了；Robolectric 启动 ~5s 拖慢 TDD；Moshi 需要 KSP/codegen 配置更重。`kotlinx.serialization` 是 Kotlin 官方零额外坑、零反射、纯 JVM，APK 体积可接受。一次配好，`Manifest` / `ModelConfig` / 后续 `audio_decoder_state_spec.json` 都直接复用。 |
 
 ---
 
