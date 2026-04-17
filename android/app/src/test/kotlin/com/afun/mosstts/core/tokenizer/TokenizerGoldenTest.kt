@@ -40,6 +40,14 @@ class TokenizerGoldenTest {
     }
 
     @Test
+    fun `golden fixture file is the one currently shipped by the python exporter`() {
+        // Pin the count so an out-of-date golden file (e.g. exporter ran but
+        // test classpath cached an older copy) fails loud instead of silently
+        // matching a smaller, weaker set.
+        assertThat(fixtures.size).isAtLeast(100)
+    }
+
+    @Test
     fun `every golden fixture matches Python sentencepiece byte-for-byte`() {
         val mismatches = mutableListOf<String>()
         for ((idx, fx) in fixtures.withIndex()) {

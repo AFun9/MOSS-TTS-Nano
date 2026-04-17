@@ -119,6 +119,80 @@ GOLDEN_TEXTS = [
     "中英日韩 mixed: hello 世界 こんにちは 안녕하세요 12345.",
     # — Special tokens visible as text —
     "<|im_start|>user\nhi<|im_end|>",
+
+    # ---------------------------------------------------------------
+    # Hardening pass: failure-mode-driven fixtures added after the
+    # first 64-fixture sweep flushed out 4 silent divergences. Each
+    # group below targets a concrete way real prompts could break.
+    # ---------------------------------------------------------------
+
+    # (1) every USER_DEFINED special (type=4) must round-trip as a
+    # single id — PromptBuilder will use most of these.
+    "<|im_start|>", "<|im_end|>", "<|audio_start|>", "<|audio_end|>",
+    "<|audio_pad|>", "<|vision_start|>", "<|vision_end|>", "<|vision_pad|>",
+    "<|video_pad|>", "<user_inst>", "</user_inst>",
+
+    # (2) adjacent / nested specials — the actual shape PromptBuilder emits.
+    "<|im_start|><|im_end|>",
+    "<|im_start|>system<|im_end|><|im_start|>user<|im_end|>",
+    "<|audio_start|><|audio_end|>",
+    "<|im_start|><|audio_start|><|audio_end|><|im_end|>",
+    "<user_inst></user_inst>",  # length-tie disambiguation
+    "</user_inst><user_inst>",
+
+    # (3) specials at start / middle / end + ASCII glue.
+    "abc<|im_start|>def",
+    "你好<|audio_start|>世界",
+    "<|im_start|>",            # whole input is one special
+    "tail<|im_end|>",          # special at very end
+    "<|im_start|>head",        # special at very start (no '▁' wanted before)
+
+    # (4) NFKC compatibility forms that NFKC silently rewrites.
+    # CJK Compatibility Ideograph U+F907 → U+9F9C
+    "\uF907 鶴",
+    # Halfwidth katakana → fullwidth via NFKC
+    "ｱｲｳｴｵ",
+    # Squared/parenthesized symbols collapse via NFKC
+    "①②③㈠㈡㈢㊙",
+    # Ligature: ﬁ (U+FB01) → fi
+    "ﬁnal o\uFB03ce",
+
+    # (5) Unicode combining marks (decomposed forms).
+    "a\u0301 e\u0301",                  # á é via combining acute
+    "한\u1100\u1161",                    # hangul: composed + jamo
+
+    # (6) ZWJ emoji sequences and modifiers — we deliberately KEPT
+    # U+200D so these must still match Python sp.
+    "👨\u200d👩\u200d👧",                  # family
+    "👋🏽 hi",                            # skin-tone modifier (Fitzpatrick-4)
+    "🇨🇳🇯🇵🇰🇷",                          # regional indicator flags
+
+    # (7) repeated runs — stress-tests greedy max-score merge.
+    "aaaaaaaaaaaaaaaa",
+    "你你你你你你你你",
+    "ababababababab",
+
+    # (8) other Cf chars not in the explicit drop list —
+    # we expect Python sp to keep them; this is a regression
+    # canary in case our SpNormalizer over-deletes.
+    "abc\u061Cdef",                      # ARABIC LETTER MARK
+    "x\u180Ey",                          # MONGOLIAN VOWEL SEPARATOR
+
+    # (9) symbol-heavy inputs that often live in markdown / code.
+    "{ key: [1, 2, 3], }", "C:\\Users\\test\\file.txt",
+    "1.5e10 ± 0.001 ≈ 1.500e10", "∑(x²) → ∞",
+
+    # (10) realistic long prompts (~250–300 chars), close to the
+    # app's hard limit. These exercise BPE on long sequences
+    # where merge order can subtly diverge.
+    "在过去的二十年里，人工智能技术经历了从规则系统到统计学习再到深度神经网络的三次范式跃迁，每一次都重塑了我们对'机器是否能够思考'这一古老问题的理解；今天，大语言模型不仅能够生成连贯的文本，还能在多模态、推理、编码等任务上展现出令人惊叹的能力。",
+    "Modern speech synthesis pipelines combine a text-to-token language model with a neural codec decoder; the language model emits discrete audio tokens autoregressively, while the codec decoder turns those tokens back into a continuous waveform at 24 kHz, enabling streaming playback with sub-second first-chunk latency on edge devices.",
+
+    # (11) scripts the model probably can't speak but the tokenizer
+    # must still byte-fallback cleanly (regression canary).
+    "Γειά σου κόσμε",                    # Greek
+    "नमस्ते दुनिया",                       # Hindi (Devanagari)
+    "שלום עולם",                         # Hebrew (RTL)
 ]
 
 
