@@ -47,6 +47,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    // SentencePiece tokenizer is added in M1.1b (separate task; the Maven
+    // candidate referenced by the plan turned out to be a JitPack-style
+    // group id, so we deal with it independently to avoid blocking M1.2-M1.5).
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.truth:truth:1.4.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
