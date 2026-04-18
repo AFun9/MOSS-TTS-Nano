@@ -1,64 +1,85 @@
 package com.afun.mosstts.core.model
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-
 /**
- * Mirror of `onnx_export/config.json`.
+ * Runtime view of model architecture constants + IO-relevant token ids.
  *
- * Only the fields the Android runtime currently uses are surfaced as typed
- * properties. The original JSON is preserved in [rawJson] so future code
- * (e.g. extra hyper-parameters) can extract more without re-parsing on
- * every call.
+ * Source of truth has shifted: the v1.0.0 release bundle no longer ships a
+ * separate `config.json`. Instead, every value here is either:
+ *   - read from `manifest.json:tts_config` ([Manifest.TtsConfig]), or
+ *   - hard-coded as an architectural invariant of MOSS-TTS-Nano-100M
+ *     (number of layers, heads, hidden_size, head_dim) and validated
+ *     against the manifest's IO shapes at session creation time.
  *
- * NB: `audio_tokenizer_sample_rate=48000` is the *codec* rate. The reference
- * Python pipeline (`onnx_infer.py`) writes WAVs at 24 kHz mono after mixing
- * the two 24 kHz codec channels — that 24 kHz is a runtime constant and is
- * intentionally NOT read from this config; see Decision #30 in DEVLOG.
+ * The fixed-architecture constants below mirror the values in
+ * `export_v2/scripts/demo_generate.py` (NUM_GLOBAL_LAYERS = 12, etc.) — if
+ * a future model variant ever changes them we'd add a new bundle schema
+ * version, not silently overload these.
  */
-@Serializable
 data class ModelConfig(
-    @SerialName("nq") val nq: Int = 16,
-    @SerialName("n_vq") val nVq: Int,
-    @SerialName("hidden_size") val hiddenSize: Int = 768,
-    @SerialName("num_layers") val numLayers: Int = 12,
-    @SerialName("num_heads") val numHeads: Int = 12,
-    @SerialName("head_dim") val headDim: Int = 64,
-    @SerialName("vocab_size") val vocabSize: Int,
-    @SerialName("audio_codebook_size") val audioCodebookSize: Int,
-    @SerialName("audio_pad_token_id") val audioPadTokenId: Int,
-    @SerialName("pad_token_id") val padTokenId: Int,
-    @SerialName("im_start_token_id") val imStartTokenId: Int,
-    @SerialName("im_end_token_id") val imEndTokenId: Int,
-    @SerialName("audio_start_token_id") val audioStartTokenId: Int,
-    @SerialName("audio_end_token_id") val audioEndTokenId: Int,
-    @SerialName("audio_user_slot_token_id") val audioUserSlotTokenId: Int,
-    @SerialName("audio_assistant_slot_token_id") val audioAssistantSlotTokenId: Int,
-    @SerialName("audio_tokenizer_sample_rate") val audioTokenizerSampleRate: Int,
-    @SerialName("audio_tokenizer_downsample_rate") val audioTokenizerDownsampleRate: Int,
-    @SerialName("audio_tokenizer_num_channels") val audioTokenizerNumChannels: Int,
-    @SerialName("sampling_defaults") val samplingDefaults: SamplingDefaults,
-) {
-    /** Original JSON text, kept so callers can extract uncommon fields lazily. */
-    var rawJson: String = ""
-        internal set
+    /** Codebook count (16 for MOSS-TTS-Nano). */
+    val nVq: Int,
+    /** Per-codebook vocabulary (always 1024 in this release). */
+    val audioCodebookSize: Int,
+    /** Text tokenizer vocab size (16384). */
+    val vocabSize: Int,
 
-    @Serializable
-    data class SamplingDefaults(
-        @SerialName("text_temperature") val textTemperature: Float = 1.0f,
-        @SerialName("text_top_p") val textTopP: Float = 1.0f,
-        @SerialName("text_top_k") val textTopK: Int = 50,
-        @SerialName("audio_temperature") val audioTemperature: Float,
-        @SerialName("audio_top_p") val audioTopP: Float,
-        @SerialName("audio_top_k") val audioTopK: Int,
-        @SerialName("audio_repetition_penalty") val audioRepetitionPenalty: Float,
-    )
+    // --- Special token ids (from manifest.tts_config) ---
+    val audioPadTokenId: Int,
+    val padTokenId: Int,
+    val imStartTokenId: Int,
+    val imEndTokenId: Int,
+    val audioStartTokenId: Int,
+    val audioEndTokenId: Int,
+    val audioUserSlotTokenId: Int,
+    val audioAssistantSlotTokenId: Int,
+) {
+    /** `n_vq + 1` — total columns per prompt row. */
+    val rowStride: Int get() = nVq + 1
+
+    /** Architectural invariants (validated by [Manifest] IO shapes). */
+    val hiddenSize: Int = HIDDEN_SIZE
+    val numGlobalLayers: Int = NUM_GLOBAL_LAYERS
+    val numLocalLayers: Int = NUM_LOCAL_LAYERS
+    val numHeads: Int = N_HEADS
+    val headDim: Int = HEAD_DIM
+
+    /** Codec output sample rate (48 kHz stereo per MOSS-Audio-Tokenizer-Nano). */
+    val codecSampleRate: Int = CODEC_SR
+    val codecChannels: Int = CODEC_CHANNELS
 
     companion object {
-        private val JSON_PARSER = Json { ignoreUnknownKeys = true }
+        const val HIDDEN_SIZE = 768
+        const val NUM_GLOBAL_LAYERS = 12
+        const val NUM_LOCAL_LAYERS = 1
+        const val N_HEADS = 12
+        const val HEAD_DIM = 64
+        const val CODEC_SR = 48000
+        const val CODEC_CHANNELS = 2
 
-        fun parse(json: String): ModelConfig =
-            JSON_PARSER.decodeFromString(serializer(), json).also { it.rawJson = json }
+        /** Build a [ModelConfig] from the manifest's tts_config block. */
+        fun fromManifest(m: Manifest): ModelConfig {
+            val c = m.ttsConfig
+            require(c.audioCodebookSizes.isNotEmpty()) { "audio_codebook_sizes must be non-empty" }
+            val codebookSize = c.audioCodebookSizes.first()
+            require(c.audioCodebookSizes.all { it == codebookSize }) {
+                "all entries in audio_codebook_sizes must match (got ${c.audioCodebookSizes})"
+            }
+            require(c.audioCodebookSizes.size == c.nVq) {
+                "audio_codebook_sizes.size=${c.audioCodebookSizes.size} != n_vq=${c.nVq}"
+            }
+            return ModelConfig(
+                nVq = c.nVq,
+                audioCodebookSize = codebookSize,
+                vocabSize = c.vocabSize,
+                audioPadTokenId = c.audioPadTokenId,
+                padTokenId = c.padTokenId,
+                imStartTokenId = c.imStartTokenId,
+                imEndTokenId = c.imEndTokenId,
+                audioStartTokenId = c.audioStartTokenId,
+                audioEndTokenId = c.audioEndTokenId,
+                audioUserSlotTokenId = c.audioUserSlotTokenId,
+                audioAssistantSlotTokenId = c.audioAssistantSlotTokenId,
+            )
+        }
     }
 }

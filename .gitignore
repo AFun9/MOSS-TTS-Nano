@@ -207,3 +207,12 @@ onnx_export/
 output/
 codex/
 .codex
+
+# Large binary model & output directories (use adb push / separate hosting)
+android/models/
+export_v2/release/
+export_v2/reference/
+export_v2/outputs/
+e2e_output/
+*.onnx
+*.data

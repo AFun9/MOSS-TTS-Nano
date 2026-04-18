@@ -1,174 +1,123 @@
 package com.afun.mosstts.core.infer
 
-import com.afun.mosstts.core.tokenizer.Tokenizer
+import com.afun.mosstts.core.model.Manifest
+import com.afun.mosstts.core.model.ModelConfig
 import com.google.common.truth.Truth.assertThat
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import org.junit.Test
-import java.security.MessageDigest
 
 /**
- * End-to-end byte-equality of `PromptBuilder` against
- * `onnx_infer.py:PromptBuilder` over 17 fixtures captured by
- * `tools/dump_prompt_fixtures.py`.
+ * Structural correctness for the v1.0.0 voice_clone prompt layout.
  *
- * Failing fingerprints (shape / length / first 16 / last 16 / sum /
- * sha256) catch every plausible Kotlin↔Python divergence:
- *   - tokenizer drift (already covered by the 109-fixture tokenizer
- *     test, but PromptBuilder is the next-most-likely place to break),
- *   - special-token IDs read from the wrong meta key,
- *   - row stride / `audio_pad_token_id` filling wrong cells,
- *   - audio slot-token wiring (user vs assistant slot),
- *   - section concatenation order in `build_voice_clone_prompt`.
+ * The new builder no longer encodes template strings via the tokenizer
+ * (the manifest ships pre-tokenized prefix/suffix arrays), so there is
+ * no Python-side fixture file to compare against here. Instead we lock
+ * down the **layout invariants**:
+ *
+ *   1. Total row count is the sum of: prefix + 1 + F + 1 + after_ref +
+ *      text + asst_prefix + 1.
+ *   2. Each row has stride n_vq+1 = 17 for MOSS-TTS-Nano.
+ *   3. Text rows have audio_pad in columns 1..n_vq.
+ *   4. Reference-audio rows have audio_user_slot in column 0 and the
+ *      verbatim codes in columns 1..n_vq.
+ *   5. The single `audio_start` row right before the audio block holds
+ *      `audio_start_token_id` in column 0; the single `audio_end` row
+ *      right after holds `audio_end_token_id`; the final row that kicks
+ *      off generation holds `audio_start_token_id` again.
+ *
+ * Once we have a Kotlin-side dump tool we'll add a byte-equal fixture
+ * test against `demo_generate.py:build_input_ids`.
  */
 class PromptBuilderTest {
-    private val payload by lazy {
-        val raw = javaClass.getResource("/prompt_fixtures.json")
-            ?: error("prompt_fixtures.json not found on test classpath")
-        Json { ignoreUnknownKeys = true }
-            .decodeFromString(FixtureFile.serializer(), raw.readText())
+    private val manifest by lazy {
+        Manifest.parse(javaClass.getResource("/release_manifest_v1.json")!!.readText())
     }
+    private val cfg by lazy { ModelConfig.fromManifest(manifest) }
+    private val pb by lazy { PromptBuilder(cfg, manifest.promptTemplates) }
 
-    private val tokenizer by lazy {
-        val raw = javaClass.getResource("/tokenizer_kotlin.json")!!.readText()
-        Tokenizer.load(raw)
-    }
-
-    private val pb by lazy {
-        PromptBuilder(
-            tokenizer = tokenizer,
-            nVq = payload.meta.nVq,
-            audioPadTokenId = payload.meta.audioPadTokenId,
-            imStartTokenId = payload.meta.imStartTokenId,
-            imEndTokenId = payload.meta.imEndTokenId,
-            audioStartTokenId = payload.meta.audioStartTokenId,
-            audioEndTokenId = payload.meta.audioEndTokenId,
-            audioUserSlotTokenId = payload.meta.audioUserSlotTokenId,
-            audioAssistantSlotTokenId = payload.meta.audioAssistantSlotTokenId,
-        )
+    private fun fakeCodes(frames: Int, seed: Int = 0): AudioCodes {
+        val data = LongArray(frames * cfg.nVq)
+        // Deterministic, codebook-bounded fake codes.
+        for (i in data.indices) data[i] = ((i * 31 + seed) % cfg.audioCodebookSize).toLong()
+        return AudioCodes(frames = frames, nVq = cfg.nVq, data = data)
     }
 
     @Test
-    fun `fixture file is the one currently shipped by the python exporter`() {
-        assertThat(payload.fixtures).hasSize(17)
-        assertThat(payload.meta.nVq).isEqualTo(16)
-        assertThat(payload.meta.audioPadTokenId).isEqualTo(1024)
+    fun `voice_clone prompt total rows equals expected sum`() {
+        val frames = 5
+        val codes = fakeCodes(frames)
+        val textIds = intArrayOf(100, 200, 300, 400)
+        val prompt = pb.buildVoiceClonePrompt(textIds, codes)
+
+        val pt = manifest.promptTemplates
+        val expected = pt.userPromptPrefixTokenIds.size + 1 + frames + 1 +
+            pt.userPromptAfterReferenceTokenIds.size + textIds.size +
+            pt.assistantPromptPrefixTokenIds.size + 1
+
+        assertThat(prompt.seqLen).isEqualTo(expected)
+        assertThat(prompt.rowStride).isEqualTo(cfg.rowStride)
+        assertThat(prompt.inputIds.size).isEqualTo(expected * cfg.rowStride)
+        assertThat(prompt.attentionMask.size).isEqualTo(expected)
+        assertThat(prompt.attentionMask.toList()).containsExactlyElementsIn(List(expected) { 1L })
     }
 
     @Test
-    fun `every prompt fixture matches Python PromptBuilder byte-for-byte`() {
-        val mismatches = mutableListOf<String>()
-        for ((idx, fx) in payload.fixtures.withIndex()) {
-            val ids = tokenizer.encode(fx.text).map { it }.toIntArray()
-            assertThat(ids.size).isEqualTo(fx.textIdsLen)  // tokenizer-side sanity
+    fun `text rows fill columns 1 to n_vq with audio_pad`() {
+        val codes = fakeCodes(3)
+        val textIds = intArrayOf(42)
+        val prompt = pb.buildVoiceClonePrompt(textIds, codes)
 
-            val codes = fx.audioPrompt?.let {
-                AudioCodes(frames = it.frames, nVq = it.nVq, data = it.codes.map { v -> v.toLong() }.toLongArray())
-            }
-            val prompt = when (fx.mode) {
-                "continuation" -> pb.buildContinuationPrompt(ids, codes)
-                "voice_clone" -> pb.buildVoiceClonePrompt(ids, codes ?: error("voice_clone needs codes"))
-                else -> error("unknown mode ${fx.mode}")
-            }
-
-            val actualFp = fingerprint(prompt.inputIds)
-            val expectedFp = fx.inputIds
-            if (actualFp != expectedFp) {
-                mismatches += buildString {
-                    appendLine("[#$idx] mode=${fx.mode} text=${fx.text.take(40)}")
-                    appendLine("    expected shape=${expectedFp.shape} length=${expectedFp.length} sum=${expectedFp.sum}")
-                    appendLine("    actual   shape=${actualFp.shape}   length=${actualFp.length}   sum=${actualFp.sum}")
-                    appendLine("    expected first16=${expectedFp.first16}")
-                    appendLine("    actual   first16=${actualFp.first16}")
-                    appendLine("    expected last16=${expectedFp.last16}")
-                    appendLine("    actual   last16=${actualFp.last16}")
-                    appendLine("    expected sha=${expectedFp.sha256}")
-                    appendLine("    actual   sha=${actualFp.sha256}")
-                }
-                if (mismatches.size >= 17) break
-            }
-        }
-        if (mismatches.isNotEmpty()) {
-            error(
-                "PromptBuilder diverged from Python on ${mismatches.size}/${payload.fixtures.size} " +
-                    "fixtures (showing up to 3):\n\n" + mismatches.joinToString("\n"),
-            )
+        // Row 0 is the first prefix token; check its layout.
+        val pad = cfg.audioPadTokenId.toLong()
+        for (k in 1..cfg.nVq) {
+            assertThat(prompt.inputIds[k]).isEqualTo(pad)
         }
     }
 
-    // ---- helpers ----------------------------------------------------
+    @Test
+    fun `audio rows hold user_slot in col 0 and verbatim codes in cols 1+`() {
+        val frames = 4
+        val codes = fakeCodes(frames, seed = 7)
+        val prompt = pb.buildVoiceClonePrompt(intArrayOf(1, 2), codes)
 
-    private fun fingerprint(longs: LongArray): InputIdsFingerprint {
-        val md = MessageDigest.getInstance("SHA-256")
-        val buf = java.nio.ByteBuffer.allocate(longs.size * 8).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-        for (v in longs) buf.putLong(v)
-        md.update(buf.array())
-        val sha = md.digest().joinToString("") { "%02x".format(it) }
-        val first16 = LongArray(minOf(16, longs.size)) { longs[it] }.toList().map { it.toInt() }
-        val last16 = LongArray(minOf(16, longs.size)) { longs[longs.size - minOf(16, longs.size) + it] }
-            .toList().map { it.toInt() }
-        var sum = 0L
-        for (v in longs) sum += v
-        // Recovered shape: PromptBuilder always emits [1, T, nVq+1] flattened.
-        val rowStride = payload.meta.nVq + 1
-        val seqLen = longs.size / rowStride
-        return InputIdsFingerprint(
-            shape = listOf(1, seqLen, rowStride),
-            dtype = "int64",
-            length = longs.size,
-            first16 = first16,
-            last16 = last16,
-            sum = sum,
-            sha256 = sha,
-        )
+        val pt = manifest.promptTemplates
+        val audioStartRow = pt.userPromptPrefixTokenIds.size  // single row
+        val audioBaseRow = audioStartRow + 1                  // start of audio block
+
+        for (i in 0 until frames) {
+            val rowBase = (audioBaseRow + i) * cfg.rowStride
+            assertThat(prompt.inputIds[rowBase])
+                .isEqualTo(cfg.audioUserSlotTokenId.toLong())
+            for (k in 0 until cfg.nVq) {
+                assertThat(prompt.inputIds[rowBase + 1 + k])
+                    .isEqualTo(codes.data[i * cfg.nVq + k])
+            }
+        }
     }
 
-    @Serializable
-    data class FixtureFile(
-        val meta: Meta,
-        val fixtures: List<Fixture>,
-    )
+    @Test
+    fun `audio_start sandwiches the audio block, audio_end follows, final audio_start kicks off generation`() {
+        val frames = 2
+        val codes = fakeCodes(frames)
+        val prompt = pb.buildVoiceClonePrompt(intArrayOf(7, 8, 9), codes)
 
-    @Serializable
-    data class Meta(
-        @SerialName("n_vq") val nVq: Int,
-        @SerialName("im_start_token_id") val imStartTokenId: Int,
-        @SerialName("im_end_token_id") val imEndTokenId: Int,
-        @SerialName("audio_start_token_id") val audioStartTokenId: Int,
-        @SerialName("audio_end_token_id") val audioEndTokenId: Int,
-        @SerialName("audio_pad_token_id") val audioPadTokenId: Int,
-        @SerialName("audio_user_slot_token_id") val audioUserSlotTokenId: Int,
-        @SerialName("audio_assistant_slot_token_id") val audioAssistantSlotTokenId: Int,
-    )
+        val pt = manifest.promptTemplates
+        val rowAudioStart = pt.userPromptPrefixTokenIds.size
+        val rowAudioEnd = rowAudioStart + 1 + frames
+        val rowFinalAudioStart = prompt.seqLen - 1
 
-    @Serializable
-    data class Fixture(
-        val mode: String,
-        val text: String,
-        @SerialName("text_ids_len") val textIdsLen: Int,
-        @SerialName("has_audio_prompt") val hasAudioPrompt: Boolean,
-        @SerialName("audio_prompt") val audioPrompt: AudioPromptDto? = null,
-        @SerialName("input_ids") val inputIds: InputIdsFingerprint,
-    )
+        val rs = cfg.rowStride
+        assertThat(prompt.inputIds[rowAudioStart * rs])
+            .isEqualTo(cfg.audioStartTokenId.toLong())
+        assertThat(prompt.inputIds[rowAudioEnd * rs])
+            .isEqualTo(cfg.audioEndTokenId.toLong())
+        assertThat(prompt.inputIds[rowFinalAudioStart * rs])
+            .isEqualTo(cfg.audioStartTokenId.toLong())
+    }
 
-    @Serializable
-    data class AudioPromptDto(
-        val frames: Int,
-        val seed: Int,
-        @SerialName("n_vq") val nVq: Int,
-        val sha256: String,
-        val codes: List<Int>,
-    )
-
-    @Serializable
-    data class InputIdsFingerprint(
-        val shape: List<Int>,
-        val dtype: String,
-        val length: Int,
-        @SerialName("first_16") val first16: List<Int>,
-        @SerialName("last_16") val last16: List<Int>,
-        val sum: Long,
-        val sha256: String,
-    )
+    @Test
+    fun `mismatched n_vq throws`() {
+        val bogus = AudioCodes(frames = 2, nVq = 8, data = LongArray(16) { 0L })
+        val ex = runCatching { pb.buildVoiceClonePrompt(intArrayOf(1), bogus) }
+        assertThat(ex.isFailure).isTrue()
+    }
 }

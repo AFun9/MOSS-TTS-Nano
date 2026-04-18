@@ -1,0 +1,2068 @@
+{
+  "format_version": 1,
+  "release_version": "1.0.0",
+  "generated_at": "2026-04-18T08:49:17.527388+00:00",
+  "generator": {
+    "script": "export_v2/scripts/make_release.py",
+    "python": "3.12.8"
+  },
+  "source": {
+    "tts_checkpoint": {
+      "path": "MOSS-TTS-Nano-100M",
+      "files": {
+        "config.json": {
+          "size": 5210,
+          "sha256": "ba36b08c80d4ae0805a2bab32b6ac90ec0d1815d01d3854ba42811db1d5bde99"
+        },
+        "configuration_moss_tts_nano.py": {
+          "size": 5033,
+          "sha256": "6f77da729d829e57f08872fcee10e05bb4358305cb175747650d8d05f23c1020"
+        }
+      }
+    },
+    "codec_reference": {
+      "path": "export_v2/reference/codec_full",
+      "note": "FP32 codec graphs from official MOSS-Audio-Tokenizer-Nano-ONNX, dynamic-INT8 quantized in this release."
+    }
+  },
+  "quantization": {
+    "tts": {
+      "scheme": "dynamic INT8 weight-only",
+      "ops": [
+        "MatMul",
+        "Gather"
+      ],
+      "per_channel": true,
+      "reduce_range": false,
+      "notes": "Gather covers dynamo-emitted lm_heads; weight-tied lm_heads are untied to keep Gather (vocab,hidden) and MatMul (hidden,vocab) layouts independent."
+    },
+    "codec": {
+      "scheme": "dynamic INT8 weight-only",
+      "ops": [
+        "MatMul",
+        "Gather",
+        "Conv"
+      ],
+      "per_channel": true,
+      "reduce_range": false
+    }
+  },
+  "tts": {
+    "graphs": [
+      "moss_tts_prefill.onnx",
+      "moss_tts_decode_step.onnx",
+      "moss_tts_local_decoder.onnx",
+      "moss_tts_local_cached_step.onnx"
+    ],
+    "shared_blob": "moss_tts_shared.data",
+    "external_data_files": {
+      "moss_tts_prefill.onnx": [
+        "moss_tts_shared.data"
+      ],
+      "moss_tts_decode_step.onnx": [
+        "moss_tts_shared.data"
+      ],
+      "moss_tts_local_decoder.onnx": [
+        "moss_tts_shared.data"
+      ],
+      "moss_tts_local_cached_step.onnx": [
+        "moss_tts_shared.data"
+      ]
+    },
+    "io": {
+      "moss_tts_prefill.onnx": {
+        "inputs": [
+          {
+            "name": "input_ids",
+            "shape": [
+              1,
+              "prefill_seq",
+              17
+            ]
+          },
+          {
+            "name": "attention_mask",
+            "shape": [
+              1,
+              "prefill_seq"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "global_hidden",
+            "shape": [
+              1,
+              "prefill_seq",
+              768
+            ]
+          },
+          {
+            "name": "present_key_0",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_0",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_1",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_1",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_2",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_2",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_3",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_3",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_4",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_4",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_5",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_5",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_6",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_6",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_7",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_7",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_8",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_8",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_9",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_9",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_10",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_10",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_11",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_11",
+            "shape": [
+              1,
+              "prefill_seq",
+              12,
+              64
+            ]
+          }
+        ]
+      },
+      "moss_tts_decode_step.onnx": {
+        "inputs": [
+          {
+            "name": "input_ids",
+            "shape": [
+              1,
+              1,
+              17
+            ]
+          },
+          {
+            "name": "past_valid_lengths",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "past_key_0",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_0",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_1",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_1",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_2",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_2",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_3",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_3",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_4",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_4",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_5",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_5",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_6",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_6",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_7",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_7",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_8",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_8",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_9",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_9",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_10",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_10",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_key_11",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "past_value_11",
+            "shape": [
+              1,
+              "past_seq",
+              12,
+              64
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "global_hidden",
+            "shape": [
+              1,
+              1,
+              768
+            ]
+          },
+          {
+            "name": "present_key_0",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_0",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_1",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_1",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_2",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_2",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_3",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_3",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_4",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_4",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_5",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_5",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_6",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_6",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_7",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_7",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_8",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_8",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_9",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_9",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_10",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_10",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_key_11",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "present_value_11",
+            "shape": [
+              1,
+              "past_seq + 1",
+              12,
+              64
+            ]
+          }
+        ]
+      },
+      "moss_tts_local_decoder.onnx": {
+        "inputs": [
+          {
+            "name": "global_hidden",
+            "shape": [
+              1,
+              768
+            ]
+          },
+          {
+            "name": "text_token_id",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "audio_prefix_token_ids",
+            "shape": [
+              1,
+              15
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "text_logits",
+            "shape": [
+              1,
+              16384
+            ]
+          },
+          {
+            "name": "audio_logits",
+            "shape": [
+              1,
+              16,
+              1024
+            ]
+          }
+        ]
+      },
+      "moss_tts_local_cached_step.onnx": {
+        "inputs": [
+          {
+            "name": "global_hidden",
+            "shape": [
+              1,
+              768
+            ]
+          },
+          {
+            "name": "text_token_id",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "audio_token_id",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "channel_index",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "step_type",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "past_valid_lengths",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "local_past_key_0",
+            "shape": [
+              1,
+              "local_past_seq",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "local_past_value_0",
+            "shape": [
+              1,
+              "local_past_seq",
+              12,
+              64
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "text_logits",
+            "shape": [
+              1,
+              16384
+            ]
+          },
+          {
+            "name": "audio_logits",
+            "shape": [
+              1,
+              16,
+              1024
+            ]
+          },
+          {
+            "name": "local_present_key_0",
+            "shape": [
+              1,
+              "local_past_seq + 1",
+              12,
+              64
+            ]
+          },
+          {
+            "name": "local_present_value_0",
+            "shape": [
+              1,
+              "local_past_seq + 1",
+              12,
+              64
+            ]
+          }
+        ]
+      }
+    },
+    "model_config": {
+      "n_vq": 16,
+      "row_width": 17,
+      "hidden_size": 768,
+      "global_layers": 12,
+      "global_heads": 12,
+      "head_dim": 64,
+      "local_layers": 1,
+      "local_heads": 12,
+      "local_head_dim": 64,
+      "vocab_size": 16384,
+      "audio_codebook_size": 1024
+    }
+  },
+  "codec": {
+    "graphs": [
+      "moss_audio_tokenizer_encode.onnx",
+      "moss_audio_tokenizer_decode_full.onnx",
+      "moss_audio_tokenizer_decode_step.onnx"
+    ],
+    "shared_blob": "moss_audio_tokenizer_shared.data",
+    "external_data_files": {
+      "moss_audio_tokenizer_encode.onnx": [
+        "moss_audio_tokenizer_shared.data"
+      ],
+      "moss_audio_tokenizer_decode_full.onnx": [
+        "moss_audio_tokenizer_shared.data"
+      ],
+      "moss_audio_tokenizer_decode_step.onnx": [
+        "moss_audio_tokenizer_shared.data"
+      ]
+    },
+    "io": {
+      "moss_audio_tokenizer_encode.onnx": {
+        "inputs": [
+          {
+            "name": "waveform",
+            "shape": [
+              "batch",
+              2,
+              "waveform_length"
+            ]
+          },
+          {
+            "name": "input_lengths",
+            "shape": [
+              "batch"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "audio_codes",
+            "shape": [
+              "batch",
+              "code_length",
+              16
+            ]
+          },
+          {
+            "name": "audio_code_lengths",
+            "shape": [
+              "batch"
+            ]
+          }
+        ]
+      },
+      "moss_audio_tokenizer_decode_full.onnx": {
+        "inputs": [
+          {
+            "name": "audio_codes",
+            "shape": [
+              "batch",
+              "code_length",
+              16
+            ]
+          },
+          {
+            "name": "audio_code_lengths",
+            "shape": [
+              "batch"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "audio",
+            "shape": [
+              "batch",
+              "Castaudio_dim_1",
+              "audio_length"
+            ]
+          },
+          {
+            "name": "audio_lengths",
+            "shape": [
+              "batch"
+            ]
+          }
+        ]
+      },
+      "moss_audio_tokenizer_decode_step.onnx": {
+        "inputs": [
+          {
+            "name": "audio_codes",
+            "shape": [
+              1,
+              "code_length",
+              16
+            ]
+          },
+          {
+            "name": "audio_code_lengths",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_0",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_1",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_2",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_3",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_offset_0",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_0",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_0",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_0",
+            "shape": [
+              1,
+              500
+            ]
+          },
+          {
+            "name": "attn_offset_1",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_1",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_1",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_1",
+            "shape": [
+              1,
+              500
+            ]
+          },
+          {
+            "name": "attn_offset_2",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_2",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_2",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_2",
+            "shape": [
+              1,
+              500
+            ]
+          },
+          {
+            "name": "attn_offset_3",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_3",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_3",
+            "shape": [
+              1,
+              4,
+              500,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_3",
+            "shape": [
+              1,
+              500
+            ]
+          },
+          {
+            "name": "attn_offset_4",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_4",
+            "shape": [
+              1,
+              4,
+              800,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_4",
+            "shape": [
+              1,
+              4,
+              800,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_4",
+            "shape": [
+              1,
+              800
+            ]
+          },
+          {
+            "name": "attn_offset_5",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_5",
+            "shape": [
+              1,
+              4,
+              800,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_5",
+            "shape": [
+              1,
+              4,
+              800,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_5",
+            "shape": [
+              1,
+              800
+            ]
+          },
+          {
+            "name": "attn_offset_6",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_6",
+            "shape": [
+              1,
+              4,
+              1200,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_6",
+            "shape": [
+              1,
+              4,
+              1200,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_6",
+            "shape": [
+              1,
+              1200
+            ]
+          },
+          {
+            "name": "attn_offset_7",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_7",
+            "shape": [
+              1,
+              4,
+              1200,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_7",
+            "shape": [
+              1,
+              4,
+              1200,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_7",
+            "shape": [
+              1,
+              1200
+            ]
+          },
+          {
+            "name": "attn_offset_8",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_8",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_8",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_8",
+            "shape": [
+              1,
+              1600
+            ]
+          },
+          {
+            "name": "attn_offset_9",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_9",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_9",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_9",
+            "shape": [
+              1,
+              1600
+            ]
+          },
+          {
+            "name": "attn_offset_10",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_10",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_10",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_10",
+            "shape": [
+              1,
+              1600
+            ]
+          },
+          {
+            "name": "attn_offset_11",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_11",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_11",
+            "shape": [
+              1,
+              4,
+              1600,
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_11",
+            "shape": [
+              1,
+              1600
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "audio",
+            "shape": [
+              "Castaudio_dim_0",
+              "Castaudio_dim_1",
+              "audio_length"
+            ]
+          },
+          {
+            "name": "audio_lengths",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_out_0",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_out_1",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_out_2",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "transformer_offset_out_3",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_offset_out_0",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_0",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_0_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_0",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_0_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_0",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_0_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_1",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_1",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_1_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_1",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_1_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_1",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_1_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_2",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_2",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_2_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_2",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_2_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_2",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_2_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_3",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_3",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_3_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_3",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_3_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_3",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_3_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_4",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_4",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_4_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_4",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_4_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_4",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_4_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_5",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_5",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_5_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_5",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_5_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_5",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_5_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_6",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_6",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_6_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_6",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_6_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_6",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_6_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_7",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_7",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_7_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_7",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_7_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_7",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_7_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_8",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_8",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_8_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_8",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_8_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_8",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_8_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_9",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_9",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_9_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_9",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_9_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_9",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_9_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_10",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_10",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_10_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_10",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_10_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_10",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_10_dim_1"
+            ]
+          },
+          {
+            "name": "attn_offset_out_11",
+            "shape": [
+              1
+            ]
+          },
+          {
+            "name": "attn_cached_keys_out_11",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_keys_out_11_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_values_out_11",
+            "shape": [
+              1,
+              4,
+              "Sliceattn_cached_values_out_11_dim_2",
+              64
+            ]
+          },
+          {
+            "name": "attn_cached_positions_out_11",
+            "shape": [
+              1,
+              "Castattn_cached_positions_out_11_dim_1"
+            ]
+          }
+        ]
+      }
+    },
+    "codec_config": {
+      "sample_rate": 48000,
+      "channels": 2,
+      "downsample_rate": 3840,
+      "num_quantizers": 16
+    }
+  },
+  "tts_config": {
+    "n_vq": 16,
+    "audio_pad_token_id": 1024,
+    "pad_token_id": 3,
+    "im_start_token_id": 4,
+    "im_end_token_id": 5,
+    "audio_start_token_id": 6,
+    "audio_end_token_id": 7,
+    "audio_user_slot_token_id": 8,
+    "audio_assistant_slot_token_id": 9,
+    "audio_codebook_sizes": [
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024,
+      1024
+    ],
+    "vocab_size": 16384
+  },
+  "prompt_templates": {
+    "user_prompt_prefix_token_ids": [
+      600,
+      289,
+      10356,
+      13,
+      10356,
+      10425,
+      1860,
+      4546,
+      12907,
+      10363,
+      13325,
+      11492
+    ],
+    "user_prompt_after_reference_token_ids": [
+      10356,
+      10425,
+      3965,
+      7738,
+      11492,
+      505,
+      587,
+      10356,
+      10425,
+      352,
+      500,
+      856,
+      11492,
+      505,
+      587,
+      10356,
+      10425,
+      2128,
+      1247,
+      594,
+      11492,
+      505,
+      587,
+      10356,
+      10425,
+      348,
+      909,
+      561,
+      3648,
+      11492,
+      505,
+      587,
+      10356,
+      10425,
+      2818,
+      1305,
+      355,
+      348,
+      909,
+      11492,
+      505,
+      587,
+      10356,
+      10425,
+      484,
+      339,
+      10367,
+      783,
+      11492,
+      505,
+      587,
+      10356,
+      10425,
+      2427,
+      980,
+      11492
+    ],
+    "assistant_prompt_prefix_token_ids": [
+      10356,
+      14,
+      5,
+      4,
+      8165,
+      430
+    ]
+  },
+  "generation_defaults": {
+    "max_new_frames": 375,
+    "do_sample": true,
+    "text_temperature": 1,
+    "text_top_p": 1,
+    "text_top_k": 50,
+    "audio_temperature": 0.8,
+    "audio_top_p": 0.95,
+    "audio_top_k": 25,
+    "audio_repetition_penalty": 1.2,
+    "sample_mode": "fixed"
+  },
+  "tokenizer": {
+    "type": "sentencepiece",
+    "file": "tokenizer.model"
+  },
+  "files": {
+    "moss_tts_prefill.onnx": {
+      "size": 1458903,
+      "sha256": "7dbe8b970d7624b2fb6d4cab1dbd1cf65640f60854a3e8f7fae6fd81b4ef484e"
+    },
+    "moss_tts_decode_step.onnx": {
+      "size": 1527707,
+      "sha256": "51d82512676db71bbb76aba56a960e0eb1ffa34eebf9267c95e0222f5648fae9"
+    },
+    "moss_tts_local_decoder.onnx": {
+      "size": 250742,
+      "sha256": "7ca907b6787b75240d661cd2ef49c9cdc0e1e1750787825de840521fb41d71c0"
+    },
+    "moss_tts_local_cached_step.onnx": {
+      "size": 319347,
+      "sha256": "3f24c70a4538ce793eedaebff7d774e4b6aad25fe2f5a6293572977a82a376a7"
+    },
+    "moss_audio_tokenizer_encode.onnx": {
+      "size": 978227,
+      "sha256": "08e6f9fa3db70d882a0142b16be5aca2fe04b3aadf158760cb7c9fb605407d70"
+    },
+    "moss_audio_tokenizer_decode_full.onnx": {
+      "size": 811567,
+      "sha256": "6729c7c143bce73a59b221ad678889cde1498d59a86a27b6ac79f442f28b6a7b"
+    },
+    "moss_audio_tokenizer_decode_step.onnx": {
+      "size": 454226,
+      "sha256": "d2f20e12a9c1305bab952d9c2f33facae434615d6e4329d4b4732506e968da44"
+    },
+    "moss_tts_shared.data": {
+      "size": 143317760,
+      "sha256": "5f84d1afc60bb234b7821c0e4f35ad180327c91f1ed4dae2d0e7eb5e26af0ea0"
+    },
+    "moss_audio_tokenizer_shared.data": {
+      "size": 22932992,
+      "sha256": "3dfc20e70eb9d90844af722f1860d6dc7e5744508bae271994dec1ab213c24d0"
+    },
+    "tokenizer.model": {
+      "size": 470897,
+      "sha256": "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff"
+    }
+  },
+  "total_bytes": 172522368,
+  "share_report": {
+    "tts": {
+      "moss_tts_prefill.onnx": {
+        "n_init": 308,
+        "n_unique_added": 189,
+        "n_kept_inline": 97,
+        "inline_size_bytes": 110927377
+      },
+      "moss_tts_decode_step.onnx": {
+        "n_init": 309,
+        "n_unique_added": 0,
+        "n_kept_inline": 98,
+        "inline_size_bytes": 110927434
+      },
+      "moss_tts_local_decoder.onnx": {
+        "n_init": 155,
+        "n_unique_added": 53,
+        "n_kept_inline": 68,
+        "inline_size_bytes": 56870849
+      },
+      "moss_tts_local_cached_step.onnx": {
+        "n_init": 161,
+        "n_unique_added": 1,
+        "n_kept_inline": 74,
+        "inline_size_bytes": 57651514
+      }
+    },
+    "codec": {
+      "moss_audio_tokenizer_encode.onnx": {
+        "n_init": 478,
+        "n_unique_added": 279,
+        "n_kept_inline": 188,
+        "inline_size_bytes": 11923515
+      },
+      "moss_audio_tokenizer_decode_full.onnx": {
+        "n_init": 373,
+        "n_unique_added": 188,
+        "n_kept_inline": 128,
+        "inline_size_bytes": 11288557
+      },
+      "moss_audio_tokenizer_decode_step.onnx": {
+        "n_init": 373,
+        "n_unique_added": 0,
+        "n_kept_inline": 128,
+        "inline_size_bytes": 11288557
+      }
+    }
+  }
+}

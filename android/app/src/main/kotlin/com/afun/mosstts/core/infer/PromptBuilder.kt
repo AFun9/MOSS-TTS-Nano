@@ -1,102 +1,75 @@
 package com.afun.mosstts.core.infer
 
-import com.afun.mosstts.core.tokenizer.Tokenizer
+import com.afun.mosstts.core.model.Manifest
+import com.afun.mosstts.core.model.ModelConfig
 
 /**
- * Kotlin port of `onnx_infer.py:PromptBuilder`.
+ * Kotlin port of `export_v2/scripts/demo_generate.py:build_input_ids`.
  *
- * Produces the `[1, T, n_vq+1]` int64 prompt tensor (text token in
- * column 0, audio_pad in columns 1..n_vq for text rows; slot-token in
- * column 0, codec codes in columns 1..n_vq for audio rows). Two prompt
- * shapes are supported:
+ * Produces the `[1, T, n_vq+1]` int64 prompt tensor used by `prefill`:
+ *   - column 0 holds either a text token id (for "text rows") or one of
+ *     the slot tokens (`audio_user_slot` / `audio_assistant_slot`) for
+ *     "audio rows";
+ *   - columns 1..n_vq hold `audio_pad_token_id` for text rows, or the
+ *     16 codec codebook ids for audio rows.
  *
- *   - `buildContinuationPrompt(textIds, codes? = null)`:
- *         user_prefix + "None" + after_ref + textIds + assistant_prefix +
- *         <audio_start> [+ codes-as-assistant-slot if provided]
+ * The official voice_clone layout (the only generation mode the v1.0.0
+ * release exposes) is, top-to-bottom:
  *
- *   - `buildVoiceClonePrompt(textIds, codes)`:
- *         user_prefix + <audio_start> + codes-as-user-slot + <audio_end> +
- *         after_ref + textIds + assistant_prefix + <audio_start>
+ * ```
+ * user_prompt_prefix_token_ids                      [text rows]
+ * <audio_start>                                     [single text row]
+ * prompt_audio_codes (F rows, slot=audio_user_slot) [F audio rows]
+ * <audio_end>                                       [single text row]
+ * user_prompt_after_reference_token_ids             [text rows]
+ * text_token_ids (target text)                      [text rows]
+ * assistant_prompt_prefix_token_ids                 [text rows]
+ * <audio_start>                                     [single text row, kicks off generation]
+ * ```
  *
- * Static prefix tokens are computed once in the constructor (matches
- * Python `__init__`), so per-call work is O(textIds + codeFrames).
+ * **Why we no longer encode template strings via the tokenizer**: the
+ * v1.0.0 release ships the three boilerplate sections as pre-tokenized
+ * id arrays inside `manifest.prompt_templates`. Driving them through
+ * `Tokenizer.encode(...)` had been a recurring source of off-by-one drift
+ * (the user/role/template strings include `<|im_start|>` and ZWJ-adjacent
+ * unicode that the SP normalizer is touchy about). Since the manifest is
+ * the single source of truth for the on-device protocol, we now consume
+ * those id arrays verbatim — guaranteed byte-equal to Python.
  *
- * Byte-equality with the reference is enforced by `PromptBuilderTest`
- * across 17 multi-language fixtures including the empty-text and
- * special-token-literal edge cases.
+ * The user-supplied target text is still tokenized at runtime; that's
+ * locked down by the 64-fixture `TokenizerGoldenTest`.
  */
 class PromptBuilder(
-    private val tokenizer: Tokenizer,
-    val nVq: Int,
-    private val audioPadTokenId: Int,
-    private val imStartTokenId: Int,
-    private val imEndTokenId: Int,
-    private val audioStartTokenId: Int,
-    private val audioEndTokenId: Int,
-    private val audioUserSlotTokenId: Int,
-    private val audioAssistantSlotTokenId: Int,
+    private val cfg: ModelConfig,
+    private val templates: Manifest.PromptTemplates,
 ) {
-    /** `n_vq + 1` — total columns per prompt row (text/slot col + n_vq code cols). */
-    val rowStride: Int = nVq + 1
+    /** `n_vq + 1` — total columns per prompt row. */
+    val rowStride: Int = cfg.rowStride
 
-    private val userPrefix: IntArray
-    private val afterRef: IntArray
-    private val assistantPrefix: IntArray
-    private val noneIds: IntArray
-
-    init {
-        val imStart = imStartTokenId
-        val imEnd = imEndTokenId
-        userPrefix = concat(
-            intArrayOf(imStart),
-            encode(USER_ROLE_PREFIX),
-            encode(USER_TEMPLATE_REFERENCE_PREFIX),
-        )
-        afterRef = encode(USER_TEMPLATE_AFTER_REFERENCE)
-        assistantPrefix = concat(
-            encode(USER_TEMPLATE_SUFFIX),
-            intArrayOf(imEnd),
-            encode(ASSISTANT_TURN_PREFIX),
-            intArrayOf(imStart),
-            encode(ASSISTANT_ROLE_PREFIX),
-        )
-        noneIds = encode("None")
-    }
-
-    fun buildContinuationPrompt(textIds: IntArray, promptAudioCodes: AudioCodes? = null): Prompt {
-        val promptIds = concat(userPrefix, noneIds, afterRef, textIds, assistantPrefix)
-        val sections = ArrayList<Section>(3).apply {
-            add(Section.Text(promptIds))
-            add(Section.Text(intArrayOf(audioStartTokenId)))
-            if (promptAudioCodes != null) {
-                add(Section.Audio(promptAudioCodes, slotTokenId = audioAssistantSlotTokenId))
-            }
+    /**
+     * Build the full input_ids for the official voice_clone generation
+     * mode. [textIds] are the tokenizer-encoded user text; [promptCodes]
+     * are the codec codes for the reference audio (either from a builtin
+     * voice or from a runtime-cloned wav via [com.afun.mosstts.core.infer.CodecRunner]).
+     */
+    fun buildVoiceClonePrompt(textIds: IntArray, promptCodes: AudioCodes): Prompt {
+        require(promptCodes.nVq == cfg.nVq) {
+            "audio prompt nVq=${promptCodes.nVq} != cfg.nVq=${cfg.nVq}"
         }
+        val sections = listOf(
+            Section.Text(templates.userPromptPrefixTokenIds.toIntArray()),
+            Section.Text(intArrayOf(cfg.audioStartTokenId)),
+            Section.Audio(promptCodes, slotTokenId = cfg.audioUserSlotTokenId),
+            Section.Text(intArrayOf(cfg.audioEndTokenId)),
+            Section.Text(templates.userPromptAfterReferenceTokenIds.toIntArray()),
+            Section.Text(textIds),
+            Section.Text(templates.assistantPromptPrefixTokenIds.toIntArray()),
+            Section.Text(intArrayOf(cfg.audioStartTokenId)),
+        )
         return assemble(sections)
     }
 
-    fun buildVoiceClonePrompt(textIds: IntArray, promptAudioCodes: AudioCodes): Prompt {
-        require(promptAudioCodes.nVq == nVq) { "audio prompt nVq=${promptAudioCodes.nVq} != $nVq" }
-        val prefixIds = concat(userPrefix, intArrayOf(audioStartTokenId))
-        val suffixIds = concat(
-            intArrayOf(audioEndTokenId),
-            afterRef,
-            textIds,
-            assistantPrefix,
-            intArrayOf(audioStartTokenId),
-        )
-        return assemble(
-            listOf(
-                Section.Text(prefixIds),
-                Section.Audio(promptAudioCodes, slotTokenId = audioUserSlotTokenId),
-                Section.Text(suffixIds),
-            ),
-        )
-    }
-
     // ---- internals -------------------------------------------------
-
-    private fun encode(text: String): IntArray = tokenizer.encode(text)
 
     private sealed class Section {
         abstract val rows: Int
@@ -108,7 +81,8 @@ class PromptBuilder(
 
     private fun assemble(sections: List<Section>): Prompt {
         val totalRows = sections.sumOf { it.rows }
-        val flat = LongArray(totalRows * rowStride) { audioPadTokenId.toLong() }
+        val pad = cfg.audioPadTokenId.toLong()
+        val flat = LongArray(totalRows * rowStride) { pad }
         var rowOffset = 0
         for (sec in sections) {
             when (sec) {
@@ -131,42 +105,16 @@ class PromptBuilder(
             rowOffset += sec.rows
         }
         val attention = LongArray(totalRows) { 1L }
-        return Prompt(inputIds = flat, attentionMask = attention, seqLen = totalRows, rowStride = rowStride)
-    }
-
-    private fun concat(vararg parts: IntArray): IntArray {
-        var n = 0
-        for (p in parts) n += p.size
-        val out = IntArray(n)
-        var off = 0
-        for (p in parts) {
-            System.arraycopy(p, 0, out, off, p.size)
-            off += p.size
-        }
-        return out
-    }
-
-    companion object {
-        // Must mirror onnx_infer.py:USER_TEMPLATE_* exactly. Any whitespace
-        // change here breaks byte-equality with the reference.
-        private const val USER_ROLE_PREFIX = "user\n"
-        private const val USER_TEMPLATE_REFERENCE_PREFIX =
-            "<user_inst>\n- Reference(s):\n"
-        private const val USER_TEMPLATE_AFTER_REFERENCE =
-            "\n- Instruction:\nNone\n" +
-                "- Tokens:\nNone\n" +
-                "- Quality:\nNone\n" +
-                "- Sound Event:\nNone\n" +
-                "- Ambient Sound:\nNone\n" +
-                "- Language:\nNone\n" +
-                "- Text:\n"
-        private const val USER_TEMPLATE_SUFFIX = "\n</user_inst>"
-        private const val ASSISTANT_TURN_PREFIX = "\n"
-        private const val ASSISTANT_ROLE_PREFIX = "assistant\n"
+        return Prompt(
+            inputIds = flat,
+            attentionMask = attention,
+            seqLen = totalRows,
+            rowStride = rowStride,
+        )
     }
 }
 
-/** Reference codec codes for voice-clone or continuation prompts. */
+/** Codec codes for a reference clip (16 codebooks, F frames). */
 data class AudioCodes(
     val frames: Int,
     val nVq: Int,
@@ -188,7 +136,7 @@ data class AudioCodes(
         (frames * 31 + nVq) * 31 + data.contentHashCode()
 }
 
-/** Output of `PromptBuilder`. `inputIds` is row-major `[1, seqLen, rowStride]`. */
+/** Output of `PromptBuilder`. `inputIds` is row-major `[1, seqLen, rowStride]` int64. */
 data class Prompt(
     val inputIds: LongArray,
     val attentionMask: LongArray,
