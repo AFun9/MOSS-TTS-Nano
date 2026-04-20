@@ -4,13 +4,18 @@ import android.app.Application
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.afun.mosstts.core.audio.AudioFileDecoder
+import com.afun.mosstts.core.audio.AudioRecorder
 import com.afun.mosstts.core.engine.StreamEvent
 import com.afun.mosstts.core.engine.TtsEngine
+import com.afun.mosstts.core.infer.AudioCodes
 import com.afun.mosstts.core.voice.BuiltinVoice
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +36,10 @@ data class TtsUiState(
     val generationTimeMs: Long = 0,
     val audioDurationSec: Float = 0f,
     val framesGenerated: Int = 0,
+    val cloneAudioCodes: AudioCodes? = null,
+    val cloneAudioDuration: Float = 0f,
+    val isEncoding: Boolean = false,
+    val isRecording: Boolean = false,
 )
 
 class TtsViewModel(app: Application) : AndroidViewModel(app) {
@@ -70,9 +79,87 @@ class TtsViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(selectedVoiceIdx = idx) }
     }
 
+    // ---- Clone: recording ----
+
+    private val recorder = AudioRecorder()
+    private var recordJob: Job? = null
+
+    val recordingAmplitude = recorder.amplitude
+    val recordingSeconds = recorder.recordingSeconds
+
+    fun startRecording() {
+        if (_state.value.isRecording) return
+        _state.update { it.copy(isRecording = true, cloneAudioCodes = null, cloneAudioDuration = 0f) }
+        recordJob = viewModelScope.launch {
+            try {
+                recorder.start()
+                val audio = recorder.stop()
+                _state.update { it.copy(isRecording = false) }
+                if (audio != null) {
+                    encodeAndSetClone(audio.pcm, audio.sampleRate, audio.durationSeconds)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Recording failed", e)
+                _state.update { it.copy(isRecording = false, errorMessage = "录音失败: ${e.message}") }
+            }
+        }
+    }
+
+    fun stopRecording() {
+        recorder.stop()
+        // The start() coroutine will finish and call encodeAndSetClone
+    }
+
+    // ---- Clone: file import ----
+
+    fun importAudio(uri: Uri) {
+        viewModelScope.launch {
+            _state.update { it.copy(isEncoding = true, cloneAudioCodes = null, cloneAudioDuration = 0f) }
+            try {
+                val audio = withContext(Dispatchers.IO) {
+                    AudioFileDecoder.decode(getApplication(), uri)
+                }
+                encodeAndSetClone(audio.pcm, audio.sampleRate, audio.durationSeconds)
+            } catch (e: Exception) {
+                Log.e(TAG, "Import failed", e)
+                _state.update { it.copy(isEncoding = false, errorMessage = "导入失败: ${e.message}") }
+            }
+        }
+    }
+
+    private suspend fun encodeAndSetClone(pcm: Array<FloatArray>, sampleRate: Int, duration: Float) {
+        _state.update { it.copy(isEncoding = true) }
+        try {
+            val codes = engine.encodeReferenceAudio(pcm, sampleRate)
+            _state.update { it.copy(cloneAudioCodes = codes, cloneAudioDuration = duration, isEncoding = false) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Encode failed", e)
+            _state.update { it.copy(isEncoding = false, errorMessage = "编码失败: ${e.message}") }
+        }
+    }
+
+    fun clearCloneAudio() {
+        _state.update { it.copy(cloneAudioCodes = null, cloneAudioDuration = 0f) }
+    }
+
+    // ---- Generation ----
+
     fun generate() {
+        launchGeneration(customCodes = null)
+    }
+
+    fun generateWithClone() {
+        val codes = _state.value.cloneAudioCodes ?: return
+        launchGeneration(customCodes = codes)
+    }
+
+    private fun launchGeneration(customCodes: AudioCodes?) {
         val s = _state.value
-        if (s.text.isBlank() || s.phase == Phase.Generating || !engine.isInitialized) return
+        if (s.phase == Phase.Generating) {
+            engine.cancelGeneration()
+            return
+        }
+        if (s.text.isBlank() || !engine.isInitialized) return
         stopAllPlayback()
 
         val pcmChunks = ArrayList<ShortArray>()
@@ -88,7 +175,10 @@ class TtsViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
             try {
-                engine.generateStreaming(s.text.trim(), s.selectedVoiceIdx) { event ->
+                engine.generateStreaming(
+                    s.text.trim(), s.selectedVoiceIdx,
+                    customCodes = customCodes,
+                ) { event ->
                     when (event) {
                         is StreamEvent.Progress -> {
                             _state.update { it.copy(framesGenerated = event.frame) }

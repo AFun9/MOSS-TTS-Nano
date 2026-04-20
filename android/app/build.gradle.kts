@@ -52,10 +52,12 @@ dependencies {
     implementation(composeBom)
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     // Pure-JVM JSON; avoids Android's `org.json.*` stub during unit tests.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
@@ -114,8 +116,9 @@ abstract class PushModelsTask @javax.inject.Inject constructor(
     fun pushAll() {
         val src = srcDir.get().asFile
         val target = deviceDir.get()
+        val excludedFiles = setOf("README.md", "moss_tts_local_decoder.onnx")
         val files = src.listFiles()
-            ?.filter { it.isFile && !it.name.startsWith(".") && it.name != "README.md" }
+            ?.filter { it.isFile && !it.name.startsWith(".") && it.name !in excludedFiles }
             ?.sortedBy { it.name }
             .orEmpty()
         require(files.isNotEmpty()) {

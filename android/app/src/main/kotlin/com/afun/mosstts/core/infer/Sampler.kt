@@ -52,6 +52,45 @@ class Sampler(
     }
 
     /**
+     * Optimized sampling with a pre-maintained boolean seen-set instead of
+     * building an IntArray of all previous IDs each call. O(V) penalty
+     * application instead of O(history_length) per channel per frame.
+     */
+    fun sampleWithSeenSet(logits: FloatArray, seen: BooleanArray): Int {
+        val penalised = if (repetitionPenalty != 1.0f) {
+            applyRepetitionPenaltyFromSet(logits, seen)
+        } else {
+            logits
+        }
+        if (temperature <= 0f) return argmax(penalised)
+
+        val scores = FloatArray(penalised.size) { penalised[it] / temperature }
+
+        if (topK > 0) applyTopK(scores, topK)
+        if (topP > 0f && topP < 1f) applyTopP(scores, topP)
+
+        val probs = softmax(scores)
+        return drawCategorical(probs)
+    }
+
+    private fun applyRepetitionPenaltyFromSet(
+        logits: FloatArray,
+        seen: BooleanArray,
+    ): FloatArray {
+        val out = logits.copyOf()
+        for (i in out.indices) {
+            if (i < seen.size && seen[i]) {
+                if (out[i] < 0f) {
+                    out[i] = out[i] * repetitionPenalty
+                } else {
+                    out[i] = out[i] / repetitionPenalty
+                }
+            }
+        }
+        return out
+    }
+
+    /**
      * Public so callers (and tests) can apply repetition penalty
      * once and reuse the result across multiple [sample] calls if
      * they want — matches the Python helper's standalone signature.

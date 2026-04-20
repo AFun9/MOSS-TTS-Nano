@@ -3,6 +3,7 @@ package com.afun.mosstts.core.infer
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import android.util.Log
 import com.afun.mosstts.core.model.ModelConfig
 
 /**
@@ -59,6 +60,9 @@ class InferenceLoop(
     private val localCachedStep: OrtSession,
     private val cfg: ModelConfig,
 ) {
+    companion object {
+        private const val TAG = "InferenceLoop"
+    }
     // Global `past_X` / `present_X` names, one pair per layer, in declared order.
     private val gtPastKeyNames: List<String> =
         (0 until cfg.numGlobalLayers).map { "past_key_$it" }
@@ -71,12 +75,37 @@ class InferenceLoop(
     private val lcPastValueNames: List<String> =
         (0 until cfg.numLocalLayers).map { "local_past_value_$it" }
 
+    // Pre-allocated DirectByteBuffers for local_cached_step scalar inputs.
+    // Avoids ~85 ByteBuffer.allocateDirect() calls per frame.
+    private val scalarIntBuf = Array(5) {
+        java.nio.ByteBuffer.allocateDirect(4).order(java.nio.ByteOrder.nativeOrder())
+    }
+    private val hiddenBuf = java.nio.ByteBuffer
+        .allocateDirect(cfg.hiddenSize * 4)
+        .order(java.nio.ByteOrder.nativeOrder())
+
+    /**
+     * @param eosNoStopBefore Frames before this index CANNOT stop (force
+     *   CONTINUE regardless of sampling). Prevents premature stopping
+     *   (missing words) for voices with early Δ dips. Typically
+     *   `textTokenCount * minFramesPerToken`.
+     * @param eosBoostStart Frame index after which EOS logit boosting begins.
+     *   Set to 0 to disable (default). Typically `textTokenCount * framesPerToken`.
+     * @param eosBoostPerFrame Amount added to the `audio_end` logit each frame
+     *   after [eosBoostStart]. E.g. 3.0 means at frame `eosBoostStart + 4`,
+     *   the end logit gets +12 — virtually guaranteeing termination.
+     * @param onFrameCommitted Called after each frame is committed.
+     *   Return `true` to continue, `false` to request early stop.
+     */
     fun generate(
         prompt: Prompt,
         textSampler: Sampler,
         audioSampler: Sampler,
         maxFrames: Int,
-        onFrameCommitted: ((frameIdx: Int, frame: LongArray) -> Unit)? = null,
+        eosNoStopBefore: Int = 0,
+        eosBoostStart: Int = 0,
+        eosBoostPerFrame: Float = 0f,
+        onFrameCommitted: ((frameIdx: Int, frame: LongArray) -> Boolean)? = null,
     ): GenResult {
         require(maxFrames > 0) { "maxFrames must be positive, got $maxFrames" }
         require(prompt.rowStride == cfg.rowStride) {
@@ -86,9 +115,12 @@ class InferenceLoop(
         val nVq = cfg.nVq
         val audioSlot = cfg.audioAssistantSlotTokenId
         val audioEnd = cfg.audioEndTokenId
+        val codebookSize = cfg.audioCodebookSize
 
         val historyBuf = Array(maxFrames) { LongArray(nVq) }
         val frameTokens = LongArray(nVq)
+        // Per-channel seen-set for repetition penalty (O(1) lookup vs O(n) history scan)
+        val seenCodes = Array(nVq) { BooleanArray(codebookSize) }
         var nGenerated = 0
         var eosFrame: Int? = null
 
@@ -107,15 +139,20 @@ class InferenceLoop(
         var globalKv: KvHolder = KvHolder(null, emptyList())
         var lastHidden: FloatArray
         var pastValidLength: Int
+        val genT0: Long
 
         try {
             // ---- 1) PREFILL --------------------------------------------------
+            val prefillT0 = System.nanoTime()
             val (firstHidden, firstKv, prefillSeq) = runPrefill(prompt)
+            val prefillMs = (System.nanoTime() - prefillT0) / 1_000_000.0
+            Log.d(TAG, "prefill: ${prefillMs.toLong()}ms (seq=$prefillSeq)")
             lastHidden = firstHidden            // [hidden]
             globalKv = firstKv                  // KvHolder owning prefill Result
             pastValidLength = prefillSeq
 
             // ---- 2) Generate frames ----------------------------------------
+            genT0 = System.nanoTime()
             frameLoop@ for (frameIdx in 0 until maxFrames) {
                 // Local KV resets to empty at the start of every frame.
                 var localKv: KvHolder = freshEmptyLocalKv()
@@ -135,7 +172,20 @@ class InferenceLoop(
                     // text head must decide between {assistant_slot, audio_end}.
                     val candIds = intArrayOf(audioSlot, audioEnd)
                     val candLogits = FloatArray(candIds.size) { textLogits[candIds[it]] }
-                    val sampledIdx = textSampler.sample(candLogits, previousIds = null)
+
+                    // EOS boosting: once past expected duration, progressively
+                    // bias toward stopping to prevent runaway generation.
+                    if (eosBoostStart > 0 && frameIdx >= eosBoostStart) {
+                        candLogits[1] += (frameIdx - eosBoostStart + 1) * eosBoostPerFrame
+                    }
+
+                    // No-stop window: force CONTINUE before minimum frame count
+                    // to prevent premature stopping (漏字) on voices with early Δ dips.
+                    val sampledIdx = if (frameIdx < eosNoStopBefore) {
+                        0 // index 0 = audio_assistant_slot (CONTINUE)
+                    } else {
+                        textSampler.sample(candLogits, previousIds = null)
+                    }
                     val nextTextToken = candIds[sampledIdx]
                     closeFloatLogits(textLogits)
 
@@ -175,17 +225,20 @@ class InferenceLoop(
 
                         // audioLogits3D is [1, 16, 1024]; we take channel ch.
                         val chLogits = audioLogits3D[ch]
-                        val previousIds: IntArray? = if (nGenerated > 0) {
-                            IntArray(nGenerated) { historyBuf[it][ch].toInt() }
-                        } else null
-                        val tok = audioSampler.sample(chLogits, previousIds = previousIds)
+                        val tok = audioSampler.sampleWithSeenSet(chLogits, seenCodes[ch])
                         frameTokens[ch] = tok.toLong()
+                        seenCodes[ch][tok] = true
                     }
 
                     // ---- 2c) commit frame ---------------------------------
                     System.arraycopy(frameTokens, 0, historyBuf[nGenerated], 0, nVq)
                     nGenerated += 1
-                    onFrameCommitted?.invoke(nGenerated - 1, historyBuf[nGenerated - 1])
+                    val shouldContinue = onFrameCommitted?.invoke(nGenerated - 1, historyBuf[nGenerated - 1])
+                    if (shouldContinue == false) {
+                        eosFrame = nGenerated - 1
+                        localKv.close()
+                        break@frameLoop
+                    }
 
                     // ---- 2d) decode_step: feed [audio_slot, frame_codes...] ---
                     val nextRow = IntArray(nVq + 1).also {
@@ -208,6 +261,11 @@ class InferenceLoop(
         } finally {
             globalKv.close()
         }
+
+        val genMs = (System.nanoTime() - genT0) / 1_000_000.0
+        val msPerFrame = if (nGenerated > 0) genMs / nGenerated else 0.0
+        Log.d(TAG, "generate: ${nGenerated} frames in ${genMs.toLong()}ms " +
+                "(${msPerFrame.toLong()}ms/frame, eos@${eosFrame ?: "cap"})")
 
         val codes = Array(nGenerated) { i -> historyBuf[i].copyOf() }
         return GenResult(codes = codes, nGenerated = nGenerated, eosFrame = eosFrame)
@@ -359,14 +417,12 @@ class InferenceLoop(
         val pastSeq = if (localPastKv.isEmpty()) 0
                       else localPastKv[0].info.shape[1].toInt()
 
-        val tHidden = OrtTensors.floatTensor(
-            env, globalHidden, longArrayOf(1L, cfg.hiddenSize.toLong()),
-        )
-        val tTextTok = OrtTensors.intTensor(env, intArrayOf(textTokenId), longArrayOf(1L))
-        val tAudioTok = OrtTensors.intTensor(env, intArrayOf(audioTokenId), longArrayOf(1L))
-        val tChan = OrtTensors.intTensor(env, intArrayOf(channelIndex), longArrayOf(1L))
-        val tStep = OrtTensors.intTensor(env, intArrayOf(stepType), longArrayOf(1L))
-        val tPastLen = OrtTensors.intTensor(env, intArrayOf(pastSeq), longArrayOf(1L))
+        val tHidden = reuseHiddenTensor(globalHidden)
+        val tTextTok = reuseScalarInt(0, textTokenId)
+        val tAudioTok = reuseScalarInt(1, audioTokenId)
+        val tChan = reuseScalarInt(2, channelIndex)
+        val tStep = reuseScalarInt(3, stepType)
+        val tPastLen = reuseScalarInt(4, pastSeq)
 
         val feed = LinkedHashMap<String, OnnxTensor>(6 + 2 * cfg.numLocalLayers).apply {
             put("global_hidden", tHidden)
@@ -408,6 +464,25 @@ class InferenceLoop(
     }
 
     // ---- helpers ------------------------------------------------------
+
+    private val scalarShape = longArrayOf(1L)
+    private val hiddenShape = longArrayOf(1L, cfg.hiddenSize.toLong())
+
+    private fun reuseScalarInt(bufIdx: Int, value: Int): OnnxTensor {
+        val bb = scalarIntBuf[bufIdx]
+        bb.clear()
+        bb.asIntBuffer().put(value)
+        bb.rewind()
+        return OnnxTensor.createTensor(env, bb.asIntBuffer(), scalarShape)
+    }
+
+    private fun reuseHiddenTensor(data: FloatArray): OnnxTensor {
+        hiddenBuf.clear()
+        val fb = hiddenBuf.asFloatBuffer()
+        fb.put(data)
+        hiddenBuf.rewind()
+        return OnnxTensor.createTensor(env, hiddenBuf.asFloatBuffer(), hiddenShape)
+    }
 
     private fun freshEmptyLocalKv(): KvHolder {
         val shape = longArrayOf(1L, 0L, cfg.numHeads.toLong(), cfg.headDim.toLong())
